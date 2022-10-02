@@ -11,7 +11,7 @@
 
 #### 01、C++
 - 《[C++Templates中文版](https://github.com/corona778/E-Books/raw/main/C%2B%2BTemplates%E4%B8%AD%E6%96%87%E7%89%88.pdf)》 
-  David Vandevoorde & Nicolai M Josuttis 著，陈伟柱 译
+  David Vandevoorde & Nicolai M. Josuttis 著，陈伟柱 译
 
 
 
