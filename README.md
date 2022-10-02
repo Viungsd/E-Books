@@ -11,9 +11,9 @@
 
 #### 01、C++
 - 《[C++Templates中文版](https://github.com/corona778/E-Books/raw/main/C%2B%2BTemplates%E4%B8%AD%E6%96%87%E7%89%88.pdf)》 
-- 《[6个可以写在简历上的C++项目](https://mp.weixin.qq.com/s/PuZpyvFzYr7ZBqe5imS9BQ)》 [百度云链接](https://pan.baidu.com/s/1efly72L--IaBt8prveuwwQ )   提取码：sq61 
+  David Vandevoorde & Nicolai M Josuttis 著，陈伟柱 译
 
-- 《[推荐一个不错的C++项目，我可能是发现这个项目的第一人](https://mp.weixin.qq.com/s/IHh4p-Pd6x6UPHXJrlDgQg)》  [百度云链接](https://pan.baidu.com/s/1Mw6158y5ZtIfvSgTSqWd1A )  提取码：s04w
+
 
 
 
@@ -21,6 +21,6 @@
 
 本仓库书籍链接全部来源于网络其他人的整理的链接，个人只是搜录整理他人成果。
 
-如有疑问请提交**issue**，有**违规侵权**，请联系本人 **coderaxiu@163.com** ，本人立马删除相应链接，感谢！
+如有疑问请提交**issue**，有**违规侵权**，请联系本人 ，本人立马删除相应链接，感谢！
 
 本仓库仅作学习交流分享使用，不作任何商用。
