@@ -1075,6 +1075,7 @@ struct IndexListType{///类型中携带数字索引信息
 
 ///技巧1：通过这种方法将 IndexListType中的索引信息...idx 提取出来
 ///技巧2：makeTuple参数直接使用变长索引...
+///技巧3：函数模板参数可以同时存在多个变参？2个“...”同时存在，类模板中应该不行
 template<typename ...T,unsigned ...idx>
 auto reformTuple(const Tuple<T...>&tup,IndexListType<idx...>) {
     return makeTuple(getTuple<idx>(tup)...);
