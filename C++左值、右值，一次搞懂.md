@@ -140,25 +140,25 @@ end
 | 返回局部变量？               | OK【拷贝】  | NO               | NO               |
 | 函数调用结果作为？           | 右值        | 左值             | 右值             |
 | 函数内部返回对象，会触发构？ | 拷贝构造    | 不会【只是引用】 | 不会【只是引用】 |
-| 形参内部元素作返回值？       | YES【拷贝】 | 看情况           | 看情况           |
+| 形参作返回值？               | YES【拷贝】 | 看情况           | 看情况           |
 |                              |             |                  |                  |
 
 #### 1、函数返回局部变量？
 
 ```
-AAA test1() {
+AAA test1() {///总是安全的，会拷贝一个副本返回
     AAA a;
     a.i = 5;
     return a;
 }
 
-AAA& test2() {
+AAA& test2() {///编译不报错，运行会出现BUG,函数返回的引用对象【局部变量】已经被析构了。
     AAA b;
     b.i = 5;
     return b;
 }
 
-AAA&& test3() {
+AAA&& test3() {///编译不报错，运行会出现BUG,函数返回的引用对象【局部变量】已经被析构了。
     AAA c;
     c.i = 5;
     return std::move(c);
@@ -214,3 +214,128 @@ AAA()000000F8528FFAE4 ///test3 内部局部变量c 构造
  ~AAA()000000F8528FFC24
 ```
 
+#### 2、形参作为返回值
+
+定义如下代码，其函数返回值都是左值引用，且都是将函数形参作为返回值。
+
+```
+namespace B {
+    AAA& test1(AAA a) {///接受左值、右值
+        a.i = 10;
+        return a;///引用了函数形参a，a在函数返回后会被析构, BUG
+    }
+
+    const AAA& test2(const AAA& a) {///接受左值、右值
+        return (a);
+    }
+
+    AAA& test3(AAA& a) {///只接受左值，函数返回后,a所引用的对象依然有效，所以返回a，完全正常。
+        return a;
+    }
+
+    AAA& test4(AAA&& a) {///只接受右值，临时值，返回一个临时值的引用
+        return a;
+    }
+};
+```
+
+##### 1、test1总是会出现BUG。
+
+```
+///test1永远会出现BUG。
+int main()
+{
+   AAA& laaa =  B::test1(AAA());///引用了函数内部的形参，函数返回后形参被析构，BUG
+   
+   ///调用顺序：test1内部局部变量被析构->函数内部形参a被析构->函数返回值作为左值触发aaa的拷贝构造函数
+   AAA  aaa  = B::test1(AAA());///BUG，由于函数内部形参a 析构 后 才会调用aaa的拷贝构造，拷贝了一个已被析构的对象
+}
+
+
+运行结果：
+
+AAA()000000992C10F754 ///test1 形参a的构造
+ ~AAA()000000992C10F754 ///test1 形参a的析构，laaa引用了这个被析构的对象a，后续如果使用会BUG
+AAA()000000992C10F794 ///test1 形参a的构造
+ ~AAA()000000992C10F794 ///test1 形参a的析构
+ AAA(const AAA & )from:000000992C10F794 to this:000000992C10F674 ///aaa拷贝了上面已经被析构的形参a
+======
+ ~AAA()000000992C10F674 ///aaa被析构
+```
+
+##### 2、test2某些情况会出现BUG：
+
+因为test3不可能接受右值，所以不可能出现BUG。
+
+```
+///test2可能导致BUG（当参数为右值且函数结果被 延长了有效期）
+int main()
+{
+    AAA tm;
+    const AAA& la4aa = B::test2(tm); ///OK，参数为左值，相当于直接引用了tm，这里不产生任何构造函数调用
+
+    cout << "start--1111" << endl;
+
+    AAA xxx = B::test2(tm);///OK，参数为左值，函数结果为左值，函数返回后tm依然有效，触发copy构造
+
+    cout << "start--2222" << endl;
+
+    const AAA& laaa =  B::test2(AAA());///Error,参数为右值，函数结果为左值，函数返回后形参被析构，BUG, 引用了一个已经被析构的对象
+   
+    cout << "start--3333" << endl;
+
+   AAA x1xx = B::test2(AAA());///OK，参数为右值，函数结果为左值，函数返回后形参被析构，但是这里x1xx的拷贝构造函数 是在 函数形参被析构之前调用的，所以OK
+   
+    cout << "======" << endl;
+}
+
+
+运行结果：
+
+AAA()000000F166AFF784 ///tm构造函数
+start--1111
+ AAA(const AAA & )from:000000F166AFF784 to this:000000F166AFF7C4///xxx以左值初始化，调用copy构造，OK
+start--2222
+AAA()000000F166AFF8E4 ///test2 参数a构造 
+ ~AAA()000000F166AFF8E4 ///test2 参数a析构，laaa引用了这个已经被析构的对象，BUG
+start--3333
+AAA()000000F166AFF904 ///test2 参数a构造 
+ AAA(const AAA & )from:000000F166AFF904 to this:000000F166AFF804 ///x1xx拷贝构造函数调用，OK，从test2的参数a中copy过来
+ ~AAA()000000F166AFF904//////test2 参数a析构
+======
+ ~AAA()000000F166AFF804
+ ~AAA()000000F166AFF7C4
+ ~AAA()000000F166AFF784
+```
+
+
+
+##### 3、test4大部分情况会出现BUG：
+
+test4将一个形参【右值】返回给了调用者作为左值，但是函数返回后，引用的形参会被析构，导致BUG
+
+```
+///大部分情况会BUG
+int main()
+{
+    const AAA& laaa =  B::test4(AAA());///Erro，
+   
+    B::test4(AAA()).i = 33; ///Error
+
+    AAA x1xx = B::test4(AAA());///OK，恰好由于x1xx的拷贝构造函数调用 先于 test4形参的析构，所以OK
+}
+
+运行结果如下：
+
+AAA()000000F55DAFFA94
+ ~AAA()000000F55DAFFA94
+AAA()000000F55DAFFAB4
+ ~AAA()000000F55DAFFAB4
+AAA()000000F55DAFFAD4
+ AAA(const AAA & )from:000000F55DAFFAD4 to this:000000F55DAFF9B4
+ ~AAA()000000F55DAFFAD4
+======
+ ~AAA()000000F55DAFF9B4
+```
+
+综上所述，函数类型返回左值引用时，需要相当小心，否则会出现难以预测的BUG。
