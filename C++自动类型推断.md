@@ -65,5 +65,28 @@
 
 - 调用了std::decay
 
+  ```
+  #include <type_traits>
+   
+  template <typename T, typename U>
+  constexpr bool is_decay_equ = std::is_same_v<std::decay_t<T>, U>;
+   
+  int main()
+  {
+      static_assert(
+          is_decay_equ<int, int> &&             ///YES
+          ! is_decay_equ<int, float> &&         ///NO
+          is_decay_equ<int&, int> &&            ///YES
+          is_decay_equ<int&&, int> &&           ///YES
+          is_decay_equ<const int&, int> &&      ///YES
+          is_decay_equ<int[2], int*> &&         ///YES
+          ! is_decay_equ<int[4][2], int*> &&    ///NO
+          ! is_decay_equ<int[4][2], int**> &&   ///NO
+          is_decay_equ<int[4][2], int(*)[2]> && ///YES
+          is_decay_equ<int(int), int(*)(int)>   ///YES
+      );
+  }
+  ```
+  
   
 
