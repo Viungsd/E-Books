@@ -686,6 +686,22 @@ auto& getTuple(Tuple<T...>& tuple){
 }
 ```
 
+#### getTuple问题：
+
+上述的实现中getTuple只接受左值，返回值类型为引用（如果参数为右值，函数返回引用则引用了即将析构的对象，导致BUG），这可以方便直接进行修改；那如何让getTuple既能接受左值也能接受右值，实现如果参数为左值则函数返回引用，否则返回非引用呢？可以利用通用引用、完美转发来实现，代码参考如下：
+
+```
+template<int idx, typename T>
+auto&& getTuple(T&& tuple) {///参数为左值则返回引用，右值则返回非引用
+    if constexpr (0 == idx) {///利用了constexpr编译时特性，Since C++17，否则就只能使用模板递归实现了
+        return  std::forward<T>(tuple).head;
+    }
+    else {
+        return getTuple<idx - 1>(std::forward<T>(tuple).tail);
+    }
+}
+```
+
 
 
 ## 1、类型搜索
