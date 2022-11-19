@@ -10,6 +10,29 @@
 
 - auto  类型变量
 
+  ```
+  int main()
+  {
+      int a = 90;
+      const int axx = a;
+      int&& raaa = 90;
+      int& laaa = a;
+      const int&& ccraaa = 90;
+      const int& cclaaa = a;
+      int aray[5] = {};
+  
+      auto _a = a;    ///int _a
+      auto _axx = axx;  ///int _axx
+      auto _raaa = raaa; ///int _raaa
+      auto _laaa = laaa; ///int _laaa
+      auto _ccraaa = ccraaa; ///int  _ccraaa
+      auto _cclaaa = cclaaa; ///int _cclaaa
+      auto pA = aray; ///int *pA
+  }
+  ```
+
+  
+
 - 函数模板参数为值传递
 
 - 调用了std::decay
