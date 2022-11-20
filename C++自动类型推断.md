@@ -47,7 +47,7 @@
       int& laaa = a;
       const int&& ccraaa = 90;
       const int& cclaaa = a;
-      int aray[5] = {};
+      int aray[5][8] = {};
   
       Test(a);      /// deduced T = int
       Test(axx);    /// deduced T = int
@@ -55,7 +55,12 @@
       Test(laaa);   /// deduced T = int
       Test(ccraaa); /// deduced T = int
       Test(cclaaa); /// deduced T = int
-      Test(aray);   /// deduced T = int*
+      Test(aray);   /// T:int (*)[8] 直接使用数组名字，实际上类型退化了
+      Test(&aray);  /// T:int (*)[5][8]
+      Test(aray[0]); /// T:int *
+      Test(&aray[0]); /// T:int (*)[8]
+      Test(aray[0][0]); /// T:int
+      Test(&aray[0][0]); /// T:int*
   }  
   ```
 
@@ -84,5 +89,9 @@
   }
   ```
   
-  
 
+### 3、auto  、auto& 、auto&& 区别
+
+### 4、decltype类型推断
+
+### 5、decltype(auto)
