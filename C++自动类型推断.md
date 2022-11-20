@@ -92,6 +92,84 @@
 
 ### 3、auto  、auto& 、auto&& 区别
 
+|        | 类型     | 发生类型退化 | 必须初始化？ |
+| ------ | -------- | ------------ | ------------ |
+| auto   | 非引用   | YES          | YES          |
+| auto&  | 左值引用 | NO           | YES          |
+| auto&& | 通用引用 | NO           | YES          |
+
+auto上面已经介绍过了，在此不再赘叙，接下来主要介绍后面两种：
+
+##### 1、auto&的使用情况：
+
+根据引用折叠的规则，auto&将始终表示左值引用，且CV（const、volatile）属性不会被丢弃，且数组名也不会被退化成指针，代码参考如下：
+
+```
+int main()
+{
+    int a = 90;
+    const int axx = a;
+    int&& raaa = 90;
+    int& laaa = a;
+    const int&& ccraaa = 90;
+    const int& cclaaa = a;
+    int aray[5][8] = {};
+
+    auto& _a = a;    ///int &
+    auto& _axx = axx;  ///const int & 
+    auto& _raaa = raaa; ///int& && = int & 折叠引用 
+    auto& _laaa = laaa; ///int& &  = int & 折叠引用 
+    auto& _ccraaa = ccraaa; ///const int & 折叠引用
+    auto& _cclaaa = cclaaa; ///const int & 折叠引用
+    auto& pA = aray;   ///int (&) [5][8]
+    auto& pA1 = aray[0];/// int (&)[8]
+    auto& pA2 = aray[0][0];/// int &
+   // auto& p00A = &aray[0]; ///Error C2440: “初始化”: 无法从“int (*)[8]”转换为“int (*&)[8]”
+   // auto& pA = &aray;/// Error auto &”与“int (&)[5][8]”的间接寻址级别不同
+}
+```
+
+##### 2、auto&& 通用引用的使用情况：
+
+所谓“通用引用”，传递的初始化值是左值则推断为左值引用，初始化是右值则推断为右值引用，且CV（const、volatile）属性不会被丢弃，且数组名也不会被退化成指针。参考代码如下：
+
+```
+int main()
+{
+    int a = 90;
+    const int axx = a;
+    int&& raaa = 90;
+    int& laaa = a;
+    const int&& ccraaa = 90;
+    const int& cclaaa = a;
+    int aray[5][8] = {};
+
+    ///初始值都是左值，因此类型推断都是左值引用
+{
+    auto&& _a = a;    /// int & 
+    auto&& _axx = axx;  ///const int & 
+    auto&& _raaa = raaa; ///int& && = int & 折叠引用 
+    auto&& _laaa = laaa; ///int& &  = int & 折叠引用 
+    auto&& _ccraaa = ccraaa; ///const int & 折叠引用
+    auto&& _cclaaa = cclaaa; ///const int & 折叠引用
+    auto&& pA = aray;   ///int (&) [5][8]
+    auto&& pA1 = aray[0];/// int (&)[8]
+    auto&& pA2 = aray[0][0];/// int &
+}
+   
+    ///初始值都是右值，因此类型推断都是右值引用
+    auto&& _a = std::move(a);    /// int && 
+    auto&& _axx = std::move(axx);  ///const int && 
+    auto&& _raaa = std::move(raaa); ///int&& && = int && 折叠引用 
+    auto&& _laaa = std::move(laaa); ///int&& &&  = int && 折叠引用 
+    auto&& _ccraaa = std::move(ccraaa); ///const int && 折叠引用
+    auto&& _cclaaa = std::move(cclaaa); ///const int && 折叠引用
+    auto&& pA = std::move(aray);   ///int (&&) [5][8]
+    auto&& pA1 = std::move(aray[0]);/// int (&&)[8]
+    auto&& pA2 = std::move(aray[0][0]);/// int &&
+}
+```
+
 ### 4、decltype类型推断
 
 ### 5、decltype(auto)
