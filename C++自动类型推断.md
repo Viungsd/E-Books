@@ -172,4 +172,6 @@ int main()
 
 ### 4、decltype类型推断
 
+decltype关键字可以编译时推断表达式的类型，不会导致上述所说的类型退化！
+
 ### 5、decltype(auto)
