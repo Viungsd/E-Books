@@ -20,7 +20,8 @@
       const int&& ccraaa = 90;
       const int& cclaaa = a;
       int aray[5] = {};
-  
+      
+      ///VS2022 鼠标指向auto变量名，编译器就会提示推断出来的是什么类型！
       auto _a = a;    ///int _a
       auto _axx = axx;  ///int _axx
       auto _raaa = raaa; ///int _raaa
@@ -115,6 +116,7 @@ int main()
     const int& cclaaa = a;
     int aray[5][8] = {};
 
+    ///VS2022 鼠标指向auto变量名，编译器就会提示推断出来的是什么类型！
     auto& _a = a;    ///int &
     auto& _axx = axx;  ///const int & 
     auto& _raaa = raaa; ///int& && = int & 折叠引用 
@@ -172,6 +174,48 @@ int main()
 
 ### 4、decltype类型推断
 
-decltype关键字可以编译时推断表达式的类型，不会导致上述所说的类型退化！
+decltype关键字可以编译时推断表达式的类型，不会导致上述所说的类型退化！decltype推导规则如下：
+
+1. 如果e是一个没有带括号的标记符表达式或者类成员访问表达式，那么的decltype（e）就是e所命名的实体的类型。此外，如果e是一个被重载的函数，则会导致编译错误。
+2. 否则 ，假设e的类型是T，如果e是一个将亡值，那么decltype（e）为T&&
+3. 否则，假设e的类型是T，如果e是一个左值，那么decltype（e）为T&。
+4. 否则，假设e的类型是T，则decltype（e）为T。
+
+```
+int main()
+{
+    int a = 90;
+    const int axx = a;
+    int&& raaa = 90;
+    int& laaa = a;
+    const int&& ccraaa = 90;
+    const int& cclaaa = a;
+    int aray[5][8] = {};
+
+   ///VS2022 鼠标指向变量名，编译器就会提示推断出来的是什么类型！因此很好验证
+
+   ///表达式为标记符表达式，且没有自带括号，与原类型完全一致，不会出现类型退化
+    decltype(a) _a = 40;    /// int
+    decltype(axx) _axx = 50;  ///const int 
+    decltype(raaa) _raaa = std::move(raaa); ///int&&
+    decltype(laaa) _laaa = laaa; ///int&
+    decltype(ccraaa) _ccraaa =  std::move(ccraaa); ///const int && 
+    decltype(cclaaa) _cclaaa = std::move(cclaaa); ///const int &
+    decltype(aray) pA;  /// int pA[5][8]
+   
+    ///表达式不是标记符表达式，且没有自带括号,且表达式返回左值，因而推断为引用
+    decltype(aray[0]) pA1 = aray[2];/// int (&pA1)[8] :[]操作返回左值，所以推断为引用
+    decltype(aray[0][0]) pA2 = aray[0][0];/// int &pA2 : [][]操作返回左值，所以推断为引用
+
+     ///表达式不是标记符表达式，且没有自带括号,表达式结果非左值，
+    decltype(aray[0][0]+5) pA3 = aray[0][0];/// int pA3 
+
+    ///表达式带括号，且表达式为左值，因而返回引用
+    decltype((a)) _000a = a;/// int &_000a
+    
+}
+```
+
+
 
 ### 5、decltype(auto)
