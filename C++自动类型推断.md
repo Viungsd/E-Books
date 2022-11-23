@@ -219,3 +219,9 @@ int main()
 
 
 ### 5、decltype(auto)
+
+```
+const int ab = 90;
+decltype(auto) a = ab; ///等同于：decltype(ab) a = ab;
+```
+
