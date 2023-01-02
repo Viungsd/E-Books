@@ -374,3 +374,200 @@ Copyright (C) Microsoft Corporation.  All rights reserved.
 ```
 
 由此看到，编译器很聪明，他巧妙的把第一个声明的不含虚函数的类放到后面了，这样子类就和第二个类共用了一个虚函数表指针，新增的虚函数也加到表的后面。
+
+### 6、多个虚继承的类
+
+如果类同时虚继承了多个类，会如何呢？按照上面的知识，我们可以猜想，多个虚基类自然也应该放到数据的后面，且应该多增加一个虚基类表的指针，记录下每个虚基类的数据偏移量，这样子类才能正常访问父类的数据成员。我们验证一下：
+
+```
+struct Obj {
+	int m_obj1;
+	int m_obj2;
+	virtual void ObjTest() {
+	}
+	virtual void print() {
+	}
+	virtual ~Obj() {
+	}
+};
+
+struct Live:Obj {
+	int m_live1;
+	int m_live2;
+	virtual void print() {
+	}
+	virtual void liveTest() {
+	}
+	virtual ~Live() {
+	}
+};
+
+struct Animal :virtual Obj, virtual Live {
+	int m_anmal1;
+	int m_anmal2;
+
+	virtual void print() override {///重写了父类的虚函数
+	}
+
+	virtual void speak() {///新增的虚函数
+	}
+};
+```
+
+输出如下：
+
+```
+class Animal    size(48):
+        +---
+ 0      | {vfptr}
+ 4      | {vbptr}
+ 8      | m_anmal1
+12      | m_anmal2
+        +---
+        +--- (virtual base Obj)
+16      | {vfptr}
+20      | m_obj1
+24      | m_obj2
+        +---
+        +--- (virtual base Live)
+28      | +--- (base class Obj)
+28      | | {vfptr}
+32      | | m_obj1
+36      | | m_obj2
+        | +---
+40      | m_live1
+44      | m_live2
+        +---
+
+Animal::$vftable@Animal@:
+        | &Animal_meta
+        |  0
+ 0      | &Animal::speak
+
+Animal::$vbtable@:
+ 0      | -4
+ 1      | 12 (Animald(Animal+4)Obj)
+ 2      | 24 (Animald(Animal+4)Live)
+
+Animal::$vftable@Obj@:
+        | -16
+ 0      | &Obj::ObjTest
+ 1      | &Animal::print
+ 2      | &Animal::{dtor}
+
+Animal::$vftable@Live@:
+        | -28
+ 0      | &Obj::ObjTest
+ 1      | &thunk: this-=12; goto Animal::print
+ 2      | &thunk: this-=12; goto Animal::{dtor}
+ 3      | &Live::liveTest
+
+Animal::print this adjustor: 16
+Animal::speak this adjustor: 0
+Animal::{dtor} this adjustor: 16
+Animal::__delDtor this adjustor: 16
+Animal::__vecDelDtor this adjustor: 16
+vbi:       class  offset o.vbptr  o.vbte fVtorDisp
+             Obj      16       4       4 0
+            Live      28       4       8 0
+```
+
+可以看到，这与我们的猜想基本一致，但是问题来了，里面Obj对象的数据好像有两份，我们怎么样才能使得相同的类只有一份数据呢？等等....不是说好了虚继承本质就是为了解决继承同个类多次导致类数据有多份的问题吗？为什么我们用了virtual继承却还是有2份数据呢？
+
+我们可以尝试把上面的代码稍作修改：让Live 也虚继承自Obj
+
+```
+struct Obj {
+	int m_obj1;
+	int m_obj2;
+	virtual void ObjTest() {
+	}
+	virtual void print() {
+	}
+	virtual ~Obj() {
+	}
+};
+
+struct Live:virtual Obj {///修改点，此次也修改为虚继承
+	int m_live1;
+	int m_live2;
+	virtual void print() {
+	}
+	virtual void liveTest() {
+	}
+	virtual ~Live() {
+	}
+};
+
+struct Animal :virtual Obj, virtual Live {
+	int m_anmal1;
+	int m_anmal2;
+
+	virtual void print() override {///重写了父类的虚函数
+	}
+
+	virtual void speak() {///新增的虚函数
+	}
+};
+```
+
+输出如下：
+
+```
+class Animal    size(48):
+        +---
+ 0      | {vfptr}
+ 4      | {vbptr}
+ 8      | m_anmal1
+12      | m_anmal2
+        +---
+16      | (vtordisp for vbase Obj) ///这个字段用来干嘛的呢？？
+        +--- (virtual base Obj)
+20      | {vfptr}
+24      | m_obj1
+28      | m_obj2
+        +---
+        +--- (virtual base Live)
+32      | {vfptr}
+36      | {vbptr} ///指向自己所有的虚基类数据地址偏移量
+40      | m_live1
+44      | m_live2
+        +---
+
+Animal::$vftable@Animal@:
+        | &Animal_meta
+        |  0
+ 0      | &Animal::speak
+
+Animal::$vbtable@Animal@:
+ 0      | -4
+ 1      | 16 (Animald(Animal+4)Obj)
+ 2      | 28 (Animald(Animal+4)Live)
+
+Animal::$vftable@Obj@:
+        | -20
+ 0      | &Obj::ObjTest
+ 1      | &(vtordisp) Animal::print
+ 2      | &(vtordisp) Animal::{dtor}
+
+Animal::$vftable@Live@:
+        | -32
+ 0      | &Live::liveTest
+
+Animal::$vbtable@Live@:
+ 0      | -4
+ 1      | -16 (Animald(Live+4)Obj)
+
+Animal::print this adjustor: 20
+Animal::speak this adjustor: 0
+Animal::{dtor} this adjustor: 20
+Animal::__delDtor this adjustor: 20
+Animal::__vecDelDtor this adjustor: 20
+vbi:       class  offset o.vbptr  o.vbte fVtorDisp
+             Obj      20       4       4 1
+            Live      32       4       8 0
+Microsoft (R) Incremental Linker Version 14.30.30709.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+```
+
+如此一来，Obj数据确实只有一份了。
