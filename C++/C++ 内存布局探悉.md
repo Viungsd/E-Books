@@ -212,6 +212,8 @@ Copyright (C) Microsoft Corporation.  All rights reserved.
 
 所谓普通继承，指的是非虚继承。
 
+##### 1、两个基类都有虚函数
+
 ```
 struct Obj {
 	int m_obj1;
@@ -294,3 +296,81 @@ Copyright (C) Microsoft Corporation.  All rights reserved.
 1. 父类数据按照声明顺序依次放在首部位置，最后才是子类的数据成员
 2. 子类与第一个声明的类共享虚函数表指针（头部位置的指针），子类重写的虚函数会覆盖所有父类的虚函数表中，但是子类新增的虚函数只增加到第一个声明的类的虚函数表后面
 3. 第一个虚函数表和后面的虚函数表格式不同，第一个的表头包含类型信息，而后的虚函数不包含（只包含该类数据地址偏移量）。
+
+##### 2、两个基类：一个没有虚函数，一个有虚函数
+
+通过上述例子可以看到，子类一般会和第一个声明的类共用一个虚函数表指针（也就是头部的指针），但倘若第一个类本身没有虚函数呢？？这时上述的内存布局明显是不合理的！我们看下编译器会怎么办？
+
+还是用上述代码，只不过把第一个类Obj中的虚函数去掉：
+
+```
+struct Obj {
+	int m_obj1;
+	int m_obj2;
+	/*virtual void ObjTest() {
+	}
+	virtual void print() {
+	}
+	virtual ~Obj() {
+	}*/
+};
+
+struct Live {
+	int m_live1;
+	int m_live2;
+	virtual void print() {
+	}
+	virtual void liveTest() {
+	}
+	virtual ~Live() {
+	}
+};
+
+struct Animal :Obj ,Live{
+	int m_anmal1;
+	int m_anmal2;
+
+	virtual void print() override {///重写了父类的虚函数
+	}
+
+	virtual void speak() {///新增的虚函数
+	}
+};
+```
+
+输出如下：
+
+```
+class Animal    size(28):
+        +---
+ 0      | +--- (base class Live)
+ 0      | | {vfptr}
+ 4      | | m_live1
+ 8      | | m_live2
+        | +---
+12      | +--- (base class Obj)
+12      | | m_obj1
+16      | | m_obj2
+        | +---
+20      | m_anmal1
+24      | m_anmal2
+        +---
+
+Animal::$vftable@:
+        | &Animal_meta
+        |  0
+ 0      | &Animal::print
+ 1      | &Live::liveTest
+ 2      | &Animal::{dtor}
+ 3      | &Animal::speak
+
+Animal::print this adjustor: 0
+Animal::speak this adjustor: 0
+Animal::{dtor} this adjustor: 0
+Animal::__delDtor this adjustor: 0
+Animal::__vecDelDtor this adjustor: 0
+Microsoft (R) Incremental Linker Version 14.30.30709.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+```
+
+由此看到，编译器很聪明，他巧妙的把第一个声明的不含虚函数的类放到后面了，这样子类就和第二个类共用了一个虚函数表指针，新增的虚函数也加到表的后面。
