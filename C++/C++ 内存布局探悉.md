@@ -814,3 +814,7 @@ Copyright (C) Microsoft Corporation.  All rights reserved.
 ```
 
 由于Animal也采用了虚继承，因此编译器必须将Dead、Live两个基类数据都放到了尾部，因而Animal自己的头部的虚函数表指针和虚基类指针就无法与Dead共享，必须再次添加，导致多了2个指针，故而比上面的方式多了8个字节大小。而这样带来的好处是，Dead、Live这两个类在Animal的所有子类中都只会存在一份，而上面的情况则不然。
+
+
+
+Note:如果想让类A在内存中只有一个拷贝，则所有继承自A的类都应该声明为virtual，不声明为virtual的必然会增加一个A的拷贝。
