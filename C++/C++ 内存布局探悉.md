@@ -570,4 +570,247 @@ Microsoft (R) Incremental Linker Version 14.30.30709.0
 Copyright (C) Microsoft Corporation.  All rights reserved.
 ```
 
-如此一来，Obj数据确实只有一份了。
+如此一来，Obj数据确实只有一份了。我们也大概清楚编译器是如何让多个相同类只保留一份数据了。
+
+### 7、菱形虚继承问题
+
+##### 1、Animal 普通继承自两个父类（非虚继承）
+
+```
+struct Obj {
+	int m_obj1;
+	int m_obj2;
+	virtual void ObjTest() {
+	}
+	virtual void print() {
+	}
+	virtual ~Obj() {
+	}
+};
+
+struct Live :virtual Obj {
+	int m_live1;
+	int m_live2;
+	virtual void print() {
+	}
+	virtual void liveTest() {
+	}
+	virtual ~Live() {
+	}
+};
+
+struct Dead :virtual Obj {
+	int m_dead1;
+	int m_dead2;
+	virtual void print() {
+	}
+	virtual void DeadTest() {
+	}
+	virtual ~Dead() {
+	}
+};
+
+struct Animal : Dead, Live {///与 struct Animal :virtual Dead, virtual Live 完全不一样的内存布局
+	int m_anmal1;
+	int m_anmal2;
+
+	virtual void print() override {///重写了父类的虚函数
+	}
+
+	virtual void speak() {///新增的虚函数
+	}
+};
+```
+
+输出：
+
+```
+class Animal    size(56):
+        +---
+ 0      | +--- (base class Dead)
+ 0      | | {vfptr}
+ 4      | | {vbptr}
+ 8      | | m_dead1
+12      | | m_dead2
+        | +---
+16      | +--- (base class Live)
+16      | | {vfptr}
+20      | | {vbptr}
+24      | | m_live1
+28      | | m_live2
+        | +---
+32      | m_anmal1
+36      | m_anmal2
+        +---
+40      | (vtordisp for vbase Obj)
+        +--- (virtual base Obj)
+44      | {vfptr}
+48      | m_obj1
+52      | m_obj2
+        +---
+
+Animal::$vftable@Dead@:
+        | &Animal_meta
+        |  0
+ 0      | &Dead::DeadTest
+ 1      | &Animal::speak
+
+Animal::$vftable@Live@:
+        | -16
+ 0      | &Live::liveTest
+
+Animal::$vbtable@Dead@:
+ 0      | -4
+ 1      | 40 (Animald(Dead+4)Obj)
+
+Animal::$vbtable@Live@:
+ 0      | -4
+ 1      | 24 (Animald(Live+4)Obj)
+
+Animal::$vftable@Obj@:
+        | -44
+ 0      | &Obj::ObjTest
+ 1      | &(vtordisp) Animal::print
+ 2      | &(vtordisp) Animal::{dtor}
+
+Animal::print this adjustor: 44
+Animal::speak this adjustor: 0
+Animal::{dtor} this adjustor: 44
+Animal::__delDtor this adjustor: 44
+Animal::__vecDelDtor this adjustor: 44
+vbi:       class  offset o.vbptr  o.vbte fVtorDisp
+             Obj      44       4       4 1
+Microsoft (R) Incremental Linker Version 14.30.30709.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+```
+
+结论：
+
+1. Dead与Live类的相同部分被提取出来，放到了整个对象的最后，且被Dead与Live共享。
+2. 整个内存布局顺序：Dead->Live->Animal->Obj
+3. 声明类时，如果使用virtual，则会将该基类依次放到尾部，否则依次放首部
+
+##### 2、修改Animal继承方式为虚继承
+
+```
+struct Obj {
+	int m_obj1;
+	int m_obj2;
+	virtual void ObjTest() {
+	}
+	virtual void print() {
+	}
+	virtual ~Obj() {
+	}
+};
+
+struct Live :virtual Obj {
+	int m_live1;
+	int m_live2;
+	virtual void print() {
+	}
+	virtual void liveTest() {
+	}
+	virtual ~Live() {
+	}
+};
+
+struct Dead :virtual Obj {
+	int m_dead1;
+	int m_dead2;
+	virtual void print() {
+	}
+	virtual void DeadTest() {
+	}
+	virtual ~Dead() {
+	}
+};
+
+struct Animal :virtual Dead,virtual Live {///修改为虚继承
+	int m_anmal1;
+	int m_anmal2;
+
+	virtual void print() override {///重写了父类的虚函数
+	}
+
+	virtual void speak() {///新增的虚函数
+	}
+};
+```
+
+输出如下：
+
+```
+class Animal    size(64):
+        +---
+ 0      | {vfptr}
+ 4      | {vbptr}
+ 8      | m_anmal1
+12      | m_anmal2
+        +---
+16      | (vtordisp for vbase Obj)
+        +--- (virtual base Obj)
+20      | {vfptr}
+24      | m_obj1
+28      | m_obj2
+        +---
+        +--- (virtual base Dead)
+32      | {vfptr}
+36      | {vbptr}
+40      | m_dead1
+44      | m_dead2
+        +---
+        +--- (virtual base Live)
+48      | {vfptr}
+52      | {vbptr}
+56      | m_live1
+60      | m_live2
+        +---
+
+Animal::$vftable@:
+        | &Animal_meta
+        |  0
+ 0      | &Animal::speak
+
+Animal::$vbtable@Animal@:
+ 0      | -4
+ 1      | 16 (Animald(Animal+4)Obj)
+ 2      | 28 (Animald(Animal+4)Dead)
+ 3      | 44 (Animald(Animal+4)Live)
+
+Animal::$vftable@Obj@:
+        | -20
+ 0      | &Obj::ObjTest
+ 1      | &(vtordisp) Animal::print
+ 2      | &(vtordisp) Animal::{dtor}
+
+Animal::$vftable@Dead@:
+        | -32
+ 0      | &Dead::DeadTest
+
+Animal::$vbtable@Dead@:
+ 0      | -4
+ 1      | -16 (Animald(Dead+4)Obj)
+
+Animal::$vftable@Live@:
+        | -48
+ 0      | &Live::liveTest
+
+Animal::$vbtable@Live@:
+ 0      | -4
+ 1      | -32 (Animald(Live+4)Obj)
+
+Animal::print this adjustor: 20
+Animal::speak this adjustor: 0
+Animal::{dtor} this adjustor: 20
+Animal::__delDtor this adjustor: 20
+Animal::__vecDelDtor this adjustor: 20
+vbi:       class  offset o.vbptr  o.vbte fVtorDisp
+             Obj      20       4       4 1
+            Dead      32       4       8 0
+            Live      48       4      12 0
+Microsoft (R) Incremental Linker Version 14.30.30709.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+```
+
+由于采用了Animal也采用了虚继承，因此编译器必须将Dead、Live两个基类数据都放到了尾部，因而Animal自己的头部的虚函数表指针和虚基类指针就无法与Dead共享，必须再次添加，导致多了2个指针，故而比上面的方式多了8个字节大小。而这样带来的好处是，Dead、Live这两个类在Animal的所有子类中都只会存在一份，而上面的情况则不然。
