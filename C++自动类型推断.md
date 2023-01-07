@@ -160,6 +160,8 @@ int main()
 }
    
     ///初始值都是右值，因此类型推断都是右值引用
+    auto&& rInt = 90; ///int&&
+	auto&& aaInt = rInt+ 5;///int&&
     auto&& _a = std::move(a);    /// int && 
     auto&& _axx = std::move(axx);  ///const int && 
     auto&& _raaa = std::move(raaa); ///int&& && = int && 折叠引用 
