@@ -24,6 +24,7 @@ struct CCC {
 ```
 ///非类型模板参数 C++17后支持 auto或decltype(auto) 推断
 ///判断T中是否有名称为c的成员变量（静态、非静态都可）
+///假设c是int类型静态成员，则auto推断为int*,如果是对象成员变量，则auto推断为对象成员变量指针int T::*
 template<typename T,auto = &T::c>///这里的auto最关键，使得可以同时支持类的静态成员变量和对象成员变量
 std::true_type has_member_c(T);
 
