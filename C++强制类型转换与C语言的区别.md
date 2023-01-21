@@ -11,14 +11,14 @@
 - 变量的类型信息发生变化（Must Be）
 - 变量的值发生变化(May be)
 
-|                  | 隐式转换 | 显式转换 |
-| ---------------- | -------- | -------- |
-| 类型信息变化？   | YES      | YES      |
-| 变量值发生变化？ | NO       |   1、int a=1; char c = char(a); //没变<br />2、double a=8.1; int b=int(a);///变化，小数位丢失<br />3、int**pInt = &a; double* * pD = (double*)pInt; //没变   |
+|                  | 隐式转换 | 显式转换                                                     |
+| ---------------- | -------- | ------------------------------------------------------------ |
+| 类型信息变化？   | YES      | YES                                                          |
+| 变量值发生变化？ | NO       | 1、int a=1; char c = char(a); //没变<br />2、double a=8.1; int b=int(a);///变化，小数位丢失<br />3、int * pInt = &a; double  * pD = (double*)pInt; //没变 |
 
 我们不难发现一个简单道理：**C语言中对指针类型的进行任何形式的类型转换其值都不会改变。**
 
-为何我要强调这一点呢？由于C++中引入虚函数机制，实现所谓“动态联编”，导致**C与C++会有根本性不同**。
+为何我要强调这一点呢？由于C++中引入多继承、虚函数机制，导致**C与C++会有根本性不同**。
 
 参考如下代码：
 
@@ -37,13 +37,45 @@ struct BBB:AAA {///存在虚函数，导致每个对象起始处增加一个虚�
 int main() {
 	BBB bb;
 	
-	BBB* pB = &bb;                     ///0x005afd2c
-	AAA* pA = pB;                      ///0x005afd30
-	BBB* pBB = static_cast<BBB*>(pA);  ///0x005afd2c
+	BBB* pB = &bb;                     ///0x005afd2c,指向bb的首地址
+	AAA* pA = pB;                      ///0x005afd30,隐式转换=pb+4(越过vftable)
+	BBB* pBB = static_cast<BBB*>(pA);  ///0x005afd2c,强制转换=pA-4(保留vftable)
 	AAA* pVA = (AAA*)(void*)pB;        ///0x005afd2c
 	AAA* pLA = (AAA*)(long)pB;         ///0x005afd2c
 
 	return 0;
 }
 ```
+
+通过上面的简单的例子可以发现，在C++中同样的一个指针用不同的方式进行转换时其值是可能发生变化的。我们再继续探讨多继承时的情况：
+
+```
+struct AAA {
+	int a = 2;///对象的成员变量
+	int b = 1;
+};
+struct BBB {
+	int c = 5;
+	int d = 3;
+};
+struct CC :AAA, BBB {
+	int e = 6;
+};
+
+int main() {
+	CC c;
+
+	CC* pC = &c;                        ///0x012ffd38
+	AAA* pA = pC;                       ///0x012ffd38
+	BBB* pB = pC;                       ///0x012ffd40
+	CC* pCA = static_cast<CC*>(pA);     ///0x012ffd38
+	CC* pCB = static_cast<CC*>(pB);     ///0x012ffd38
+
+	return 0;
+}
+```
+
+如果对C++对象的内存布局模型有所了解的话，便能很容易理解其指针值的变化规律**—遵循C++对象的内存布局**
+
+下面将继续分析其他多继承、虚拟继承等情况。
 
