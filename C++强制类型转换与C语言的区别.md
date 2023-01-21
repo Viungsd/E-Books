@@ -65,11 +65,11 @@ struct CC :AAA, BBB {
 int main() {
 	CC c;
 
-	CC* pC = &c;                        ///0x012ffd38
-	AAA* pA = pC;                       ///0x012ffd38
-	BBB* pB = pC;                       ///0x012ffd40
-	CC* pCA = static_cast<CC*>(pA);     ///0x012ffd38
-	CC* pCB = static_cast<CC*>(pB);     ///0x012ffd38
+	CC* pC = &c;                   ///0x012ffd38
+	AAA* pA = pC;                  ///0x012ffd38,AAA是CC的第一个基类，位于CC的起始位置，共享起始地址
+	BBB* pB = pC;                  ///0x012ffd40,BB是CC的第二个基类，仅位于AA之后=pA+sizeof(AAA)
+	CC* pCA = static_cast<CC*>(pA);///0x012ffd38
+	CC* pCB = static_cast<CC*>(pB);///0x012ffd38
 
 	return 0;
 }
