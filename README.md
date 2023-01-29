@@ -17,8 +17,9 @@
 
 - 《[C++.Primer.Plus(中文版第5版)](https://github.com/corona778/E-Books/raw/main/C%2B%2B/C%2B%2B.Primer.Plus%EF%BC%88%E4%B8%AD%E6%96%87%E7%89%88%E7%AC%AC5%E7%89%88%EF%BC%89.pdf)》 
  美 Stephen Prata著，孙建春、韦强 译
- 
-- 
+
+- 《[动手学深度学习](https://zh.d2l.ai/index.html)》
+
 
 
 
