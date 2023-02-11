@@ -169,8 +169,8 @@ struct func final:is_mem_func<T> {
     }data;
 };
 
-///推断指引
-template<typename T>////仿函数推断指引
+///推断指引，不管初始化的是普通函数指针、类成员函数指针、仿函数对象、lamda表达式，都会推断成普通函数指针
+template<typename T>////仿函数、lamda表达式推断指引
 func(T)->func<typename is_mem_func<decltype(&T::operator())>::type_func>;
 
 template<typename RET, typename ...ARG>///普通函数指针推断指引
