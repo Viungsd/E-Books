@@ -20,6 +20,9 @@ int testFun(int a,int b) {
 struct A {
     int i = 10;
     int cc = 90;
+    int print(int a) {
+        return i + cc + a;
+    }
     int  operator()(int a, char c) {///实现仿函数
         return a + c + i + cc;
     }
@@ -52,8 +55,7 @@ int main() {
 - 同一个function< int (int,int) >对象，如何同时支持上面四种对象？（可以同时用函数指针、仿函数对象、lamada表达式等进行赋值操作）
 
 ```
-
-template <typename RET,typename ...ARC>
+template <typename RET, typename ...ARC>
 struct base_callable
 {
     virtual void copy(void* dest) = 0;
@@ -61,20 +63,31 @@ struct base_callable
 };
 
 template <typename T, typename RET, typename ...ARC>
-struct noalloc_callable :base_callable<RET,ARC...> {
-    noalloc_callable(T _a):_m(_a) {
+struct noalloc_callable :base_callable<RET, ARC...> {
+
+    noalloc_callable(T _a) :_m(_a) {
     }
-    
+
     ///将_m对象赋值到dest指定的地方
     void copy(void* dest) override {
         new(dest) noalloc_callable<T, RET, ARC...>(_m);
     }
 
-    RET operator()(ARC... arc) override{
-        return _m(arc...);
+    RET operator()(ARC... arc) override {
+        if constexpr (std::is_member_function_pointer_v<T>) {
+            return opt<RET>(_m,arc...);
+        }else {
+            return _m(arc...);
+        }
     }
 
     T _m;
+
+private:
+    template<typename R, typename TP, typename ARC1, typename ...ARCN>
+    R opt(TP pointer, ARC1 a_1, ARCN... a_n) {
+        return (a_1.*pointer)(a_n...);
+    }
 };
 
 
@@ -102,17 +115,17 @@ template <typename RET, typename ...ARC >
 struct is_mem_func<RET(ARC...)> {
     using type_func = RET(ARC...);
     using base_func = base_callable<RET, ARC...>;
-    
+
     using base_type = func<type_func>;
 
-    RET operator()(ARC... arc) {  
-        auto p = static_cast<base_type*>(this)->get_ptr();   
+    RET operator()(ARC... arc) {
+        auto p = static_cast<base_type*>(this)->get_ptr();
         return (*p)(arc...);
     }
 
     template<typename C>
     is_mem_func(C arg) {
-        using callable_type = noalloc_callable<C,RET,ARC...>;
+        using callable_type = noalloc_callable<C, RET, ARC...>;
         auto& data = static_cast<base_type*>(this)->data;
         if (sizeof(callable_type) <= sizeof(data.content)) {
             new(data.content) callable_type(arg);
@@ -138,14 +151,14 @@ struct func :is_mem_func<T> {
     }
 
     template<typename C>
-    func(C arg):is_mem_func<T>(arg) {
+    func(C arg) :is_mem_func<T>(arg) {
     }
 
     func& operator=(func c) {
         c.get_ptr()->copy(data.content);
         return *this;
     }
-     
+
     union {
         base_func* content[(capacity - 1)];
         base_func* _[capacity];
@@ -159,11 +172,23 @@ func(T)->func<typename is_mem_func<decltype(&T::operator())>::type_func>;
 template<typename RET, typename ...ARG>
 func(RET(ARG...))->func<RET(ARG...)>;
 
+template<typename RET,typename CLS, typename ...ARG>
+func(RET (CLS::*)(ARG...))->func<RET(const CLS&,ARG...)>;
+
 
 int main()
 {
+    A a;
+    func ppp = &A::print;  ///func<int (const A &, int)>
+    int ret = ppp(a, 6);///106
+
+    ppp = [](const A&, int a) {
+        return a * 10;
+    };
+    int ret666 = ppp(a, 6);///60
+
     func fc = testFun; /// func<int(int, int)> fc
-    int ret0 = fc(4,5);///9
+    int ret0 = fc(4, 5);///9
 
     fc = A{};
     int ret1 = fc(6, 7);///113
