@@ -78,15 +78,16 @@ struct noalloc_callable :base_callable<RET, ARC...> {
 
     RET operator()(ARC... arc) override {
         if constexpr (std::is_member_function_pointer_v<T>) {///类成员函数指针
-            return opt<RET>(_m,arc...);//主要因为类成员函数指针调用方式不同，需要拆解出arc的第一个参数
-        }else {///函数指针、仿函数、lamada
+            return opt<RET>(_m, arc...);//主要因为类成员函数指针调用方式不同，需要拆解出arc的第一个参数
+        }
+        else {///函数指针、仿函数、lamada
             return _m(arc...);
         }
     }
 
     T _m;
 private:
-///必须将arc参数列表的第一个参数拆解出来
+    ///必须将arc参数列表的第一个参数拆解出来,作为类成员函数指针调用
     template<typename R, typename TP, typename ARC1, typename ...ARCN>
     R opt(TP pointer, ARC1 a_1, ARCN... a_n) {
         return (a_1.*pointer)(a_n...);
@@ -118,22 +119,23 @@ template <typename RET, typename ...ARC >
 struct is_mem_func<RET(ARC...)> {
     using type_func = RET(ARC...);
     using base_func = base_callable<RET, ARC...>;
-    using base_type = func<type_func>;///子类类型
+    using sub_class_type = func<type_func>;///子类类型
 
     RET operator()(ARC... arc) {
-        auto p = static_cast<base_type*>(this)->get_ptr();///强制转换成子类对象
+        auto p = static_cast<sub_class_type*>(this)->get_ptr();///强制转换成子类对象
         return (*p)(arc...);///调用虚函数对象实现的仿函数
     }
 
     template<typename C>
     is_mem_func(C arg) {
         using callable_type = noalloc_callable<C, RET, ARC...>;
-        auto& data = static_cast<base_type*>(this)->data;
+        auto& data = static_cast<sub_class_type*>(this)->data;
         if (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
             new(data.content) callable_type(arg);
-            data._[base_type::capacity - 1] = (base_func*)&data.content;
-        }else{///栈空间放不下，需要动态申请内存
-         ////待实现....依葫芦画瓢即可
+            data._[sub_class_type::capacity - 1] = (base_func*)&data.content;
+        }
+        else {///栈空间放不下，需要动态申请内存
+        ////待实现....依葫芦画瓢即可
         }
     }
 };
@@ -141,7 +143,7 @@ struct is_mem_func<RET(ARC...)> {
 ///T已经被推断指引转换成普通的函数指针了
 ///继承is_mem_func的目的是为了在父类中把T中的函数返回类型及参数类型拆解出来以实现仿函数operator()
 template<typename T>
-struct func final:is_mem_func<T> {
+struct func final :is_mem_func<T> {
     using super_type = is_mem_func<T>;
     using base_func = typename super_type::base_func;
 
@@ -176,8 +178,8 @@ func(T)->func<typename is_mem_func<decltype(&T::operator())>::type_func>;
 template<typename RET, typename ...ARG>///普通函数指针推断指引
 func(RET(ARG...))->func<RET(ARG...)>;
 
-template<typename RET,typename CLS, typename ...ARG>///类成员函数指针推断指引
-func(RET (CLS::*)(ARG...))->func<RET(const CLS&,ARG...)>;
+template<typename RET, typename CLS, typename ...ARG>///类成员函数指针推断指引
+func(RET(CLS::*)(ARG...))->func<RET(const CLS&, ARG...)>;
 
 ///Test
 int main()
