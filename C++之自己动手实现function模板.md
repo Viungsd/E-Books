@@ -164,7 +164,8 @@ struct func final :is_mem_func<T> {
         c.get_ptr()->copy(data.content);
         return *this;
     }
-    ///用来保存对象的，预留的空间（栈上）,如果要保存的对象比较小，则直接放下面的空间，否则就动态申请内存
+///用来保存较小对象预留的空间（在栈上）,如果下面预留空间放不下则就动态申请内存
+///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
     union {
         base_func* content[(capacity - 1)];
         base_func* _[capacity];
