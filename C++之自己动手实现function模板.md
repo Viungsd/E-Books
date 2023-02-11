@@ -55,6 +55,10 @@ int main() {
 - 同一个function< int (int,int) >对象，如何同时支持上面四种对象？（可以同时用函数指针、仿函数对象、lamada表达式等进行赋值操作）
 
 ```
+#include <iostream>
+#include <functional>
+#include<type_traits>
+
 template <typename RET, typename ...ARC>
 struct base_callable
 {
@@ -64,7 +68,6 @@ struct base_callable
 
 template <typename T, typename RET, typename ...ARC>
 struct noalloc_callable :base_callable<RET, ARC...> {
-
     noalloc_callable(T _a) :_m(_a) {
     }
 
@@ -74,9 +77,9 @@ struct noalloc_callable :base_callable<RET, ARC...> {
     }
 
     RET operator()(ARC... arc) override {
-        if constexpr (std::is_member_function_pointer_v<T>) {
+        if constexpr (std::is_member_function_pointer_v<T>) {///类成员函数指针
             return opt<RET>(_m,arc...);
-        }else {
+        }else {///函数指针、仿函数、lamada
             return _m(arc...);
         }
     }
@@ -166,13 +169,13 @@ struct func :is_mem_func<T> {
 };
 
 ///推断指引
-template<typename T>
+template<typename T>////仿函数推断指引
 func(T)->func<typename is_mem_func<decltype(&T::operator())>::type_func>;
 
-template<typename RET, typename ...ARG>
+template<typename RET, typename ...ARG>///普通函数指针推断指引
 func(RET(ARG...))->func<RET(ARG...)>;
 
-template<typename RET,typename CLS, typename ...ARG>
+template<typename RET,typename CLS, typename ...ARG>///类成员函数指针推断指引
 func(RET (CLS::*)(ARG...))->func<RET(const CLS&,ARG...)>;
 
 
