@@ -11,8 +11,8 @@ C++的function模板可以包裹C++中一切可以被callable的对象，包括�
 
 ```
 ///2.普通函数指针
-int testFun(int a,int b) {
-    cout << "testFun -> a:" << a << "  b:" << b << endl;
+int testFun(int a, int b) {
+    std::cout << "testFun -> a:" << a << "  b:" << b << std::endl;
     return a + b;
 }
 
