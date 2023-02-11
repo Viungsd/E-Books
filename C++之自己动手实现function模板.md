@@ -127,11 +127,11 @@ struct is_mem_func<RET(ARC...)> {
     }
 
     template<typename C>
-    is_mem_func(C arg) {
+    is_mem_func(C &&arg) {
         using callable_type = noalloc_callable<C, RET, ARC...>;
         auto& data = static_cast<sub_class_type*>(this)->data;
         if (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
-            new(data.content) callable_type(arg);
+            new(data.content) callable_type(std::forward<C>(arg));
             data._[sub_class_type::capacity - 1] = (base_func*)&data.content;
         }
         else {///栈空间放不下，需要动态申请内存
@@ -157,15 +157,15 @@ struct func final :is_mem_func<T> {
     }
 
     template<typename C>
-    func(C arg) :is_mem_func<T>(arg) {
+    func(C&& arg) :is_mem_func<T>(std::forward<C>(arg)) {
     }
 
     func& operator=(func c) {
         c.get_ptr()->copy(data.content);
         return *this;
     }
-///用来保存较小对象预留的空间（在栈上）,如果下面预留空间放不下则就动态申请内存
-///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
+    ///用来保存较小对象预留的空间（在栈上）,如果下面预留空间放不下则就动态申请内存
+    ///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
     union {
         base_func* content[(capacity - 1)];
         base_func* _[capacity];
