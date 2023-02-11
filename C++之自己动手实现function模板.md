@@ -134,7 +134,7 @@ struct is_mem_func<RET(ARC...)> {
             new(data.content) callable_type(arg);
             data._[base_type::capacity - 1] = (base_func*)&data.content;
         }else{///栈空间放不下，需要动态申请内存
-         ////need to malloc memeory
+         ////待实现....依葫芦画瓢即可
         }
     }
 
