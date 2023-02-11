@@ -52,17 +52,22 @@ int main() {
 - 同一个function< int (int,int) >对象，如何同时支持上面四种对象？（可以同时用函数指针、仿函数对象、lamada表达式等进行赋值操作）
 
 ```
+
 template <typename RET,typename ...ARC>
 struct base_callable
 {
-   // virtual void copy(void* dest) = 0;
-   // virtual void move(void* dest) = 0;
+    virtual void copy(void* dest) = 0;
     virtual RET operator()(ARC...) = 0;
 };
 
 template <typename T, typename RET, typename ...ARC>
 struct noalloc_callable :base_callable<RET,ARC...> {
     noalloc_callable(T _a):_m(_a) {
+    }
+    
+    ///将_m对象赋值到dest指定的地方
+    void copy(void* dest) override {
+        new(dest) noalloc_callable<T, RET, ARC...>(_m);
     }
 
     RET operator()(ARC... arc) override{
@@ -135,6 +140,11 @@ struct func :is_mem_func<T> {
     template<typename C>
     func(C arg):is_mem_func<T>(arg) {
     }
+
+    func& operator=(func c) {
+        c.get_ptr()->copy(data.content);
+        return *this;
+    }
      
     union {
         base_func* content[(capacity - 1)];
@@ -142,13 +152,29 @@ struct func :is_mem_func<T> {
     }data;
 };
 
-
+///推断指引
 template<typename T>
 func(T)->func<typename is_mem_func<decltype(&T::operator())>::type_func>;
 
 template<typename RET, typename ...ARG>
 func(RET(ARG...))->func<RET(ARG...)>;
 
+
+int main()
+{
+    func fc = testFun; /// func<int(int, int)> fc
+    int ret0 = fc(4,5);///9
+
+    fc = A{};
+    int ret1 = fc(6, 7);///113
+
+    fc = [=](int a, int b) {
+        return a + b + ret0;
+    };
+    int ret2 = fc(10, 20);///39
+
+    return 0;
+}
 ```
 
 
