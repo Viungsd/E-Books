@@ -85,8 +85,8 @@ struct noalloc_callable :base_callable<RET, ARC...> {
     }
 
     T _m;
-
 private:
+///必须将arc参数列表的第一个参数拆解出来
     template<typename R, typename TP, typename ARC1, typename ...ARCN>
     R opt(TP pointer, ARC1 a_1, ARCN... a_n) {
         return (a_1.*pointer)(a_n...);
@@ -118,8 +118,7 @@ template <typename RET, typename ...ARC >
 struct is_mem_func<RET(ARC...)> {
     using type_func = RET(ARC...);
     using base_func = base_callable<RET, ARC...>;
-
-    using base_type = func<type_func>;
+    using base_type = func<type_func>;///子类类型
 
     RET operator()(ARC... arc) {
         auto p = static_cast<base_type*>(this)->get_ptr();///强制转换成子类对象
@@ -137,12 +136,12 @@ struct is_mem_func<RET(ARC...)> {
          ////待实现....依葫芦画瓢即可
         }
     }
-
 };
 
-
+///T已经被推断指引转换成普通的函数指针了
+///继承is_mem_func的目的是为了在父类中把T中的函数返回类型及参数类型拆解出来以实现仿函数operator()
 template<typename T>
-struct func :is_mem_func<T> {
+struct func final:is_mem_func<T> {
     using super_type = is_mem_func<T>;
     using base_func = typename super_type::base_func;
 
