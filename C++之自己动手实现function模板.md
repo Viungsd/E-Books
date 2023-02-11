@@ -49,9 +49,9 @@ int main() {
 
 如何自己实现function的功能呢？本人苦思许久，加上对STL模板的研读，总结后决定自己动手试试，难点如下：
 
-- 4种callable对象在C++中类型本不同，需要使用类型萃取技术统一成相同类型int(int ,int)
-- 函数指针、仿函数等调用方式本不同，如何统一调用方式 ？
-- 4种callable对象size不同，（例如，函数指针大小为4个字节，而lamada对象大小取决于所捕获的变量），如何在function对象中同时支持这四种对象？
+- 4种callable对象在C++中类型本不同，需要使用类型萃取技术统一成相同类型（上面的例子是：int(int ,int)）
+- 类成员函数指针、函数指针等调用方式不同，如何统一调用方式 ？
+- 4种callable对象size不同，（例如，函数指针大小为4个字节，而lamada对象大小取决于所捕获的变量），如何在一个function对象中同时支持这四种对象？
 - 同一个function< int (int,int) >对象，如何同时支持上面四种对象？（可以同时用函数指针、仿函数对象、lamada表达式等进行赋值操作）
 
 ```
@@ -107,7 +107,7 @@ struct is_mem_func<RET(CLS::*)(ARC...)> {
     using type_func = RET(ARC...);
 };
 
-///const 类函数指针
+///const 类函数指针，lamada表达式所用
 template <typename RET, typename CLS, typename ...ARC >
 struct is_mem_func<RET(CLS::*)(ARC...) const> {
     using type_func = RET(ARC...);
@@ -122,17 +122,19 @@ struct is_mem_func<RET(ARC...)> {
     using base_type = func<type_func>;
 
     RET operator()(ARC... arc) {
-        auto p = static_cast<base_type*>(this)->get_ptr();
-        return (*p)(arc...);
+        auto p = static_cast<base_type*>(this)->get_ptr();///强制转换成子类对象
+        return (*p)(arc...);///调用虚函数对象实现的仿函数
     }
 
     template<typename C>
     is_mem_func(C arg) {
         using callable_type = noalloc_callable<C, RET, ARC...>;
         auto& data = static_cast<base_type*>(this)->data;
-        if (sizeof(callable_type) <= sizeof(data.content)) {
+        if (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
             new(data.content) callable_type(arg);
             data._[base_type::capacity - 1] = (base_func*)&data.content;
+        }else{///栈空间放不下，需要动态申请内存
+         ////need to malloc memeory
         }
     }
 
@@ -161,7 +163,7 @@ struct func :is_mem_func<T> {
         c.get_ptr()->copy(data.content);
         return *this;
     }
-
+    ///用来保存对象的，预留的空间（栈上） 
     union {
         base_func* content[(capacity - 1)];
         base_func* _[capacity];
