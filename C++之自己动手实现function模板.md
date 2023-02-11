@@ -72,13 +72,13 @@ struct noalloc_callable :base_callable<RET, ARC...> {
     }
 
     ///将_m对象赋值到dest指定的地方
-    void copy(void* dest) override {
+    void copy(void* dest) override {///调用自己的构造函数，初始化dest指定的内存区域
         new(dest) noalloc_callable<T, RET, ARC...>(_m);
     }
 
     RET operator()(ARC... arc) override {
         if constexpr (std::is_member_function_pointer_v<T>) {///类成员函数指针
-            return opt<RET>(_m,arc...);
+            return opt<RET>(_m,arc...);//主要因为类成员函数指针调用方式不同，需要拆解出arc的第一个参数
         }else {///函数指针、仿函数、lamada
             return _m(arc...);
         }
