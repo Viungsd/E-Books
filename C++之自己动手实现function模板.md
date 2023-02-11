@@ -89,8 +89,8 @@ struct noalloc_callable :base_callable<RET, ARC...> {
 private:
     ///必须将arc参数列表的第一个参数拆解出来,作为类成员函数指针调用
     template<typename R, typename TP, typename ARC1, typename ...ARCN>
-    R opt(TP pointer, ARC1 a_1, ARCN... a_n) {
-        return (a_1.*pointer)(a_n...);
+    R opt(TP &&pointer, ARC1 a_1, ARCN&&... a_n) {
+        return (a_1.*pointer)(std::forward<ARCN>(a_n)...);
     }
 };
 
