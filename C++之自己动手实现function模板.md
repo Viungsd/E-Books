@@ -180,7 +180,7 @@ func(RET(ARG...))->func<RET(ARG...)>;
 template<typename RET,typename CLS, typename ...ARG>///类成员函数指针推断指引
 func(RET (CLS::*)(ARG...))->func<RET(const CLS&,ARG...)>;
 
-
+///Test
 int main()
 {
     A a;
