@@ -60,7 +60,7 @@ int main() {
 #include<type_traits>
 
 template <typename RET, typename ...ARC>
-struct base_callable
+struct base_callable///虚基类
 {
     virtual void copy(void* dest) = 0;
     virtual RET operator()(ARC...) = 0;
