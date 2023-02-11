@@ -71,8 +71,8 @@ struct noalloc_callable :base_callable<RET, ARC...> {
     noalloc_callable(T _a) :_m(_a) {
     }
 
-    ///将_m对象赋值到dest指定的地方
-    void copy(void* dest) override {///调用自己的构造函数，初始化dest指定的内存区域
+    ///将自己拷贝到dest指定的地方
+    void copy(void* dest) override {///调用自己的构造函数，初始化dest指定的内存区域，拷贝自己到dest去
         new(dest) noalloc_callable<T, RET, ARC...>(_m);
     }
 
