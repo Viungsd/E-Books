@@ -127,22 +127,23 @@ struct is_mem_func<RET(ARC...)> {
     static constexpr  auto  capacity = 10;
     using type_func = RET(ARC...);
     using base_func = base_callable<RET, ARC...>;
-   
+
     RET operator()(ARC... arc) {
         return (*get_ptr())(arc...);///调用虚函数对象实现的仿函数
     }
 
-    is_mem_func(){
+    is_mem_func() {
         data._[capacity - 1] = nullptr;
     }
 
     template<typename C>
-    is_mem_func(C&& arg):is_mem_func(){
+    is_mem_func(C&& arg) :is_mem_func() {
         using callable_type = noalloc_callable<C, RET, ARC...>;
         if constexpr (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
             new(data.content) callable_type(std::forward<C>(arg));
             set_ptr((base_func*)&data.content);
-        }else{///栈空间放不下，需要动态申请内存
+        }
+        else {///栈空间放不下，需要动态申请内存
             set_ptr(new callable_type(std::forward<C>(arg)));
         }
     }
@@ -151,14 +152,14 @@ struct is_mem_func<RET(ARC...)> {
         return data._[capacity - 1];
     }
 
-    void set_ptr(base_func *pF) {
+    void set_ptr(base_func* pF) {
         if (auto p = get_ptr(); p && !is_local()) {///上次就是动态申请的，这次修改前要释放之前的
             delete p;
         }
         data._[capacity - 1] = pF;
     }
 
-///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
+    ///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
     bool is_local() {
         return ((base_func*)&data.content) == get_ptr();
     }
@@ -179,30 +180,32 @@ struct is_mem_func<RET(ARC...)> {
 template<typename T>
 struct func final :is_mem_func<T> {
     using super_type = is_mem_func<T>;
-    func():super_type(){
+    func() :super_type() {
     }
 
     template<typename C>
-    func(C&& arg) :super_type(std::forward<C>(arg)) {
+    func(C&& arg) : super_type(std::forward<C>(arg)) {
     }
 
     ///Copy
     func& operator=(func& c) {
-        if (c.is_local()){///直接放到自己的预留空间
-            set_ptr(c.get_ptr()->copy(super_type::data.content));
-        }else {///需要动态去创建一个,深复制
+        if (c.is_local()) {///直接放到自己的预留空间
+            set_ptr(c.get_ptr()->copy(this->data.content));
+        }
+        else {///需要动态去创建一个,深复制
             set_ptr(c.get_ptr()->alloc());
         }
         return *this;
     }
-   
+
     ///Move
     func& operator=(func&& c) {
         if (c.is_local()) {///直接放到自己的预留空间
-            super_type::set_ptr(c.get_ptr()->copy(super_type::data.content));
-        }else {///直接移动指针即可
-            super_type::set_ptr(c.get_ptr());///把c的指针复制过来
-            c.data._[super_type::capacity-1] = nullptr;///别忘了把c的指针置空，否则c析构的时候会释放该内存
+            this->set_ptr(c.get_ptr()->copy(this->data.content));
+        }
+        else {///直接移动指针即可
+            this->set_ptr(c.get_ptr());///把c的指针复制过来
+            c.data._[func::capacity - 1] = nullptr;///别忘了把c的指针置空，否则c析构的时候会释放该内存
         }
         return *this;
     }

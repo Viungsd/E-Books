@@ -45,7 +45,7 @@ int main()
     ///非引用变量定义
     AAA aaa = AAA();///AAA()调用默认构造，生成临时变量纯右值，用纯右值初始化aaa编译器会自动优化，连移动构造都省了
     AAA bbb = aaa;///用左值初始化，调用Copy构造
-    AAA ccc = std::move(aaa);///std::move强制把aaa转为右值，用右值初始化，优先触发移动构造，没有则copy构造
+    AAA ccc = std::move(aaa);///std::move强制把aaa转为右值（将亡值），优先触发移动构造，没有则copy构造
 
     ///左值引用变量定义
     AAA& laaaa   = aaa;///不会触发任何构造函数、只是引用aaa
