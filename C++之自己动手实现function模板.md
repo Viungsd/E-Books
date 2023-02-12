@@ -189,23 +189,27 @@ struct func final :is_mem_func<T> {
 
     ///Copy
     func& operator=(func& c) {
-        if (c.is_local()) {///直接放到自己的预留空间
-            set_ptr(c.get_ptr()->copy(this->data.content));
-        }
-        else {///需要动态去创建一个,深复制
-            set_ptr(c.get_ptr()->alloc());
+        if (this != &c) {
+            if (c.is_local()) {///直接放到自己的预留空间
+                this->set_ptr(c.get_ptr()->copy(this->data.content));
+            }
+            else {///需要动态去创建一个,深复制
+                this->set_ptr(c.get_ptr()->alloc());
+            }
         }
         return *this;
     }
 
     ///Move
     func& operator=(func&& c) {
-        if (c.is_local()) {///直接放到自己的预留空间
-            this->set_ptr(c.get_ptr()->copy(this->data.content));
-        }
-        else {///直接移动指针即可
-            this->set_ptr(c.get_ptr());///把c的指针复制过来
-            c.data._[func::capacity - 1] = nullptr;///别忘了把c的指针置空，否则c析构的时候会释放该内存
+        if (this != &c) {
+            if (c.is_local()) {///直接放到自己的预留空间
+                this->set_ptr(c.get_ptr()->copy(this->data.content));
+            }
+            else {///直接移动指针即可
+                this->set_ptr(c.get_ptr());///把c的指针复制过来
+                c.data._[func::capacity - 1] = nullptr;///别忘了把c的指针置空，否则c析构的时候会释放该内存
+            }
         }
         return *this;
     }
