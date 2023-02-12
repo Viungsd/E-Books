@@ -139,7 +139,7 @@ struct is_mem_func<RET(ARC...)> {
     template<typename C>
     is_mem_func(C&& arg):is_mem_func(){
         using callable_type = noalloc_callable<C, RET, ARC...>;
-        if (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
+        if constexpr (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
             new(data.content) callable_type(std::forward<C>(arg));
             set_ptr((base_func*)&data.content);
         }else{///栈空间放不下，需要动态申请内存
