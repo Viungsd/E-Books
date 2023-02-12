@@ -7,7 +7,7 @@ C++的function模板可以包裹C++中一切可以被callable的对象，包括�
 3. 类的成员函数指针
 4. 仿函数对象（实现operator( )函数的任意对象）
 
-目的：上述4种情况，其类型在C++中都不一样，但通过function的包裹后，可以把它们都统一成一种类型。
+目的：上述4种情况，其类型在C++中都不一样，但通过function的包裹后，可以把它们都统一成一种类型。使得他们看起来就像一种类型。
 
 ```
 ///2.普通函数指针
@@ -62,18 +62,25 @@ int main() {
 template <typename RET, typename ...ARC>
 struct base_callable///虚基类
 {
-    virtual void copy(void* dest) = 0;
+    virtual base_callable* copy(void* dest) = 0;
+    virtual base_callable* alloc() = 0;
     virtual RET operator()(ARC...) = 0;
 };
 
 template <typename T, typename RET, typename ...ARC>
 struct noalloc_callable :base_callable<RET, ARC...> {
+    using super_type = base_callable<RET, ARC...>;
+
     noalloc_callable(T _a) :_m(_a) {
     }
 
     ///将自己拷贝到dest指定的地方
-    void copy(void* dest) override {///调用自己的构造函数，初始化dest指定的内存区域，拷贝自己到dest去
-        new(dest) noalloc_callable<T, RET, ARC...>(_m);
+    super_type* copy(void* dest) override {///调用自己的构造函数，初始化dest指定的内存区域，拷贝自己到dest去
+        return new(dest) noalloc_callable<T, RET, ARC...>(_m);
+    }
+
+    super_type* alloc()override {
+        return new noalloc_callable<T, RET, ARC...>(_m);
     }
 
     RET operator()(ARC... arc) override {
@@ -89,7 +96,7 @@ struct noalloc_callable :base_callable<RET, ARC...> {
 private:
     ///必须将arc参数列表的第一个参数拆解出来,作为类成员函数指针调用
     template<typename R, typename TP, typename ARC1, typename ...ARCN>
-    R opt(TP &&pointer, ARC1 a_1, ARCN&&... a_n) {
+    R opt(TP&& pointer, ARC1 a_1, ARCN&&... a_n) {
         return (a_1.*pointer)(std::forward<ARCN>(a_n)...);
     }
 };
@@ -117,27 +124,54 @@ struct is_mem_func<RET(CLS::*)(ARC...) const> {
 ///普通函数指针
 template <typename RET, typename ...ARC >
 struct is_mem_func<RET(ARC...)> {
+    static constexpr  auto  capacity = 10;
     using type_func = RET(ARC...);
     using base_func = base_callable<RET, ARC...>;
-    using sub_class_type = func<type_func>;///子类类型
-
+   
     RET operator()(ARC... arc) {
-        auto p = static_cast<sub_class_type*>(this)->get_ptr();///强制转换成子类对象
-        return (*p)(arc...);///调用虚函数对象实现的仿函数
+        return (*get_ptr())(arc...);///调用虚函数对象实现的仿函数
+    }
+
+    is_mem_func(){
+        data._[capacity - 1] = nullptr;
     }
 
     template<typename C>
-    is_mem_func(C &&arg) {
+    is_mem_func(C&& arg):is_mem_func(){
         using callable_type = noalloc_callable<C, RET, ARC...>;
-        auto& data = static_cast<sub_class_type*>(this)->data;
         if (sizeof(callable_type) <= sizeof(data.content)) {///小对象直接放预留的栈空间
             new(data.content) callable_type(std::forward<C>(arg));
-            data._[sub_class_type::capacity - 1] = (base_func*)&data.content;
-        }
-        else {///栈空间放不下，需要动态申请内存
-        ////待实现....依葫芦画瓢即可
+            set_ptr((base_func*)&data.content);
+        }else{///栈空间放不下，需要动态申请内存
+            set_ptr(new callable_type(std::forward<C>(arg)));
         }
     }
+
+    base_func* get_ptr() {
+        return data._[capacity - 1];
+    }
+
+    void set_ptr(base_func *pF) {
+        if (auto p = get_ptr(); p && !is_local()) {///上次就是动态申请的，这次修改前要释放之前的
+            delete p;
+        }
+        data._[capacity - 1] = pF;
+    }
+
+///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
+    bool is_local() {
+        return ((base_func*)&data.content) == get_ptr();
+    }
+
+    ~is_mem_func() {
+        set_ptr(nullptr);///release
+    }
+
+    ///用来保存较小对象预留的空间（在栈上）,如果下面预留空间放不下则就动态申请内存
+    union {
+        base_func* content[(capacity - 1)];
+        base_func* _[capacity];
+    }data;
 };
 
 ///T已经被推断指引转换成普通的函数指针了
@@ -145,31 +179,33 @@ struct is_mem_func<RET(ARC...)> {
 template<typename T>
 struct func final :is_mem_func<T> {
     using super_type = is_mem_func<T>;
-    using base_func = typename super_type::base_func;
-
-    static constexpr  auto  capacity = 10;
-    func() {
-        data._[capacity - 1] = nullptr;
-    }
-
-    base_func* get_ptr() {
-        return data._[capacity - 1];
+    func():super_type(){
     }
 
     template<typename C>
-    func(C&& arg) :is_mem_func<T>(std::forward<C>(arg)) {
+    func(C&& arg) :super_type(std::forward<C>(arg)) {
     }
 
-    func& operator=(func c) {
-        c.get_ptr()->copy(data.content);
+    ///Copy
+    func& operator=(func& c) {
+        if (c.is_local()){///直接放到自己的预留空间
+            set_ptr(c.get_ptr()->copy(super_type::data.content));
+        }else {///需要动态去创建一个,深复制
+            set_ptr(c.get_ptr()->alloc());
+        }
         return *this;
     }
-    ///用来保存较小对象预留的空间（在栈上）,如果下面预留空间放不下则就动态申请内存
-    ///最后一个元素如果保存的是data的起始地址则说明对象是直接放在data里的，否则就指向动态申请的内存
-    union {
-        base_func* content[(capacity - 1)];
-        base_func* _[capacity];
-    }data;
+   
+    ///Move
+    func& operator=(func&& c) {
+        if (c.is_local()) {///直接放到自己的预留空间
+            super_type::set_ptr(c.get_ptr()->copy(super_type::data.content));
+        }else {///直接移动指针即可
+            super_type::set_ptr(c.get_ptr());///把c的指针复制过来
+            c.data._[super_type::capacity-1] = nullptr;///别忘了把c的指针置空，否则c析构的时候会释放该内存
+        }
+        return *this;
+    }
 };
 
 ///推断指引，不管初始化的是普通函数指针、类成员函数指针、仿函数对象、lamda表达式，都会推断成普通函数指针
@@ -185,12 +221,13 @@ func(RET(CLS::*)(ARG...))->func<RET(const CLS&, ARG...)>;
 ///Test
 int main()
 {
+    int array[100] = { 0 };
     A a;
     func ppp = &A::print;  ///func<int (const A &, int)>
     int ret = ppp(a, 6);///106
 
-    ppp = [](const A&, int a) {
-        return a * 10;
+    ppp = [=](const A&, int a) {///lamda捕获了数组，需要动态申请内存来存储
+        return a * 10 + array[0];
     };
     int ret666 = ppp(a, 6);///60
 
