@@ -1,0 +1,1155 @@
+# C++ Tuple 元组实现 Metaprogramming
+
+核心玩法：模板递归、偏特化
+
+    template<typename ... Tn>struct Tuple;
+    
+    template<typename T0,typename ... Tn>
+    struct Tuple<T0,Tn...>{
+        T0 head;
+        Tuple<Tn...>tail;
+        constexpr static int size = sizeof...(Tn)+1;
+        Tuple():head(0){
+           
+        }
+        
+        Tuple(const T0 &h,const Tuple<Tn...> &t):head(h),tail(t){
+        }
+        
+        Tuple(const Tuple<T0,Tn...> & a):head(a.head),tail(a.tail){
+        }
+       
+        template<typename _T0,typename ... _Tn,typename =std::enable_if_t<sizeof...(Tn)==sizeof...(_Tn)>>
+        Tuple( _T0&& a, _Tn && ...  n):head(std::forward<_T0>(a)),tail(std::forward<_Tn>(n)...){
+            cout<<"=="<<sizeof...(Tn)+1 <<endl;
+        }
+    };
+    
+    template<typename T>
+    struct Tuple<T>{
+        constexpr static int size = 1;
+        T head;
+        
+        Tuple():head(0){
+        }
+        
+        Tuple(const T &h):head(h){
+        }
+        
+        Tuple(const Tuple<T> & a):head(a.head){
+        }
+        
+    };
+    
+    template<>
+    struct Tuple<>{
+        constexpr static int size = 0;
+        Tuple(){
+        }
+    };
+
+## 1、类型搜索
+
+从Tuple中搜索某个类型，只要存在一个，则返回true,否则返回false 例如：Tuple<char,short,double> 类型中是否包含 某个类型（short）？只要包含返回true,否则返回false
+
+```
+
+template<typename Patten,typename ...T>struct Search;
+    
+template<typename Patten,typename H,typename ...T>
+struct Search<Patten,Tuple<H,T...>>: std::conditional_t<std::is_same_v<Patten, H>,std::true_type, Search<Patten, Tuple<T...>>> {
+};
+
+template<typename Patten>
+struct Search<Patten,Tuple<>>: std::false_type {
+};
+
+///Test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double> a('s',5,6.8);
+    
+    bool x0x = Search<short, decltype(a)>::value;/// true
+    bool x2x = Search<double, decltype(a)>::value;/// true
+    bool x3x = Search<unsigned short, decltype(a)>::value;/// false
+    bool x4x = Search<int, decltype(a)>::value;/// false
+   
+    return 0;
+}
+```
+
+## 2、类型搜索（并统计个数）
+
+或者，我们可以更近一步，从Tuple中搜索某个类型，并且统计出有多少个该类型？
+
+```
+template<typename Patten,typename ...T>struct Count;
+    
+template<typename Patten,typename H,typename ...T>
+struct Count<Patten,Tuple<H,T...>>:std::integral_constant<int, std::is_same_v<Patten, H> + Count<Patten, Tuple<T...>>::value > {
+};
+
+template<typename Patten>
+struct Count<Patten,Tuple<>>: std::integral_constant<int, 0> {
+};
+
+///Test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,short,int,double,double> a;
+    
+    int c0 = Count<char, decltype(a)>::value;///1
+    int c1 = Count<short, decltype(a)>::value;///2
+    int c2 = Count<double, decltype(a)>::value;///3
+    int c3 = Count<bool, decltype(a)>::value;///0
+    int c4 = Count<unsigned char, decltype(a)>::value;///0
+    int c5 = Count<int, decltype(a)>::value;///1
+    
+    return 0;
+}
+```
+
+有了上述统计类型个数的方法，判断Tuple中是否包含某个类型还可以修改成如下：
+
+原理：该类型个数大于0返回true,否则返回false，不过效率相对低点，因为不管是否包含都会完全遍历完整个类型列表。
+
+```
+///判断是否存在某个类型？
+template<typename Patten,typename ...T>
+using search_t = std::conditional_t< (Count<Patten, T...>::value > 0) , std::true_type, std::false_type>;
+
+///Test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,short,double,double> a;
+    
+    bool x0x = search_t<short, decltype(a)>::value;/// true
+    bool x2x = search_t<double, decltype(a)>::value;/// true
+    bool x3x = search_t<unsigned short, decltype(a)>::value;/// false
+    bool x4x = search_t<int, decltype(a)>::value;/// false
+    
+    return 0;
+}
+```
+
+## 3、类型搜索（返回首次匹配到该类型时的位置）
+
+或者，我们可以更更再近一步，从Tuple中搜索某个类型，并返回第一次匹配到该类型时的位置（从1开始），如果没有匹配到返回0
+
+```
+template<typename Patten,typename ...T>struct SearchHIdx;
+  
+template<typename Patten,typename H,typename ...T>
+struct SearchHIdx<Patten,Tuple<H,T...>>: std::integral_constant<int,(std::is_same_v<Patten, H> ? sizeof...(T) :  SearchHIdx<Patten, Tuple<T...>>::value )>{
+};
+
+template<typename Patten>
+struct SearchHIdx<Patten,Tuple<>>: std::integral_constant<int, 0> {
+};
+
+template<typename Patten,typename ...T>struct SearchH;
+
+template<typename Patten,typename ...T>
+struct SearchH<Patten,Tuple<T...>> :std::integral_constant<int,((SearchHIdx<Patten, Tuple<T...>>::value == 0) ? 0 : (sizeof...(T) - SearchHIdx<Patten, Tuple<T...>>::value))>{
+};
+
+///Test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,short,double,double> a;///6
+    
+    int idx0 = SearchH<char, decltype(a)>::value;///1
+    int idx1 = SearchH<short, decltype(a)>::value;///2
+    int idx2 = SearchH<double, decltype(a)>::value;///3
+    int idx3 = SearchH<int, decltype(a)>::value;///0， Not found
+
+    return 0;
+}
+```
+
+## 4、寻找Tuple最大类型
+
+我们可以从Tuple中萃取占内存最大的那个类型，代码如下：
+
+```
+template <typename ...T>struct MaxType;
+
+template <typename H,typename ...T>
+struct MaxType<Tuple<H,T...>>{
+    using lastSize = typename MaxType<Tuple<T...>>::type;
+    using type = std::conditional_t<(sizeof(H)>=sizeof(lastSize)), H,lastSize>;
+};
+
+template <typename X,typename H>
+struct MaxType<Tuple<X,H>>{
+    using type = std::conditional_t<(sizeof(X)>=sizeof(H)),X,H>;
+};
+
+template <typename H>
+struct MaxType<Tuple<H>>{
+    using type = H;
+};
+
+template <typename ...T>
+using maxType_t = typename MaxType<T...>::type;
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a ('a',34,6.8,true);
+    Tuple<short,double> av(90,88.9);
+    Tuple<char> ab;
+    
+    maxType_t<decltype(a)> xx1;///double
+    maxType_t<decltype(av)> add;///double
+    maxType_t<decltype(ab)> ad4d;///char
+        
+    return 0;
+}
+```
+
+
+
+## 5、萃取Tuple指定位置的类型
+
+我们可以从Tuple中萃取指定位置的类型，例如第一个、最后一个、或者第n个...
+
+可以例如模版函数声明，代码如下：
+
+```
+template<typename Head,typename ...Trail>
+Head ForntT(Tuple<Head,Trail...>);///获取第一个类型
+
+///template<typename ...Head,typename Trail>///获取最后一个类型
+///Trail BackT(Tuple<Head...,Trail>);///【无法使用该模板】：因为Tuple<Head...,Trail>类型作为函数参数编译器推断不出来
+
+template<typename Head,typename ...Trail>
+Tuple<Trail...> PopForntT(Tuple<Head,Trail...>);///移除第一个类型
+
+template<typename Head,typename ...Trail>
+Tuple<Head,Trail...> PushForntT(Head ,Tuple<Trail...>);///插入类型到Tuple的首部
+
+template<typename ...Head,typename Trail>
+Tuple<Head...,Trail> PushBackT(Tuple<Head...>,Trail);///插入类型到Tuple的尾部
+
+///Test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double> a;
+   
+    decltype(ForntT(a)) x1;/// char x1;
+    decltype(PopForntT(a)) x2;///   Tuple<short,double> x2;
+    decltype(PushBackT(a,false)) x3;///  Tuple<char,short,double,bool> x3;
+    
+    return 0;
+}
+```
+
+通过上述函数模板的声明，可以利用编译器推断出来Tuple的部分位置的情况，但是上述方法无法推断出Tuple的最后一个类型，或者移除最后一个类型，我们得想其他办法。我们尝试用类模板偏特化试试看：
+
+```
+template<typename T>struct FrontC;
+
+template<typename Head,typename ...Trail>
+struct FrontC<Tuple<Head,Trail...>>{///获取第一个类型
+    using type = Head;
+};
+
+//template<typename T>struct BackC;
+//
+//template<typename ...Head,typename Trail>
+//struct BackC<Tuple<Head...,Trail>>{///获取最后一个类型，无法编译通过
+//    using type = Trail;
+//};
+
+
+template<typename T>struct PopFrontC;
+
+template<typename Head,typename ...Trail>
+struct PopFrontC<Tuple<Head,Trail...>>{///移除第一个类型
+    using type = Tuple<Trail...>;
+};
+
+template<typename Head,typename ...Trail>struct PushFrontC;
+
+template<typename Head,typename ...Trail>
+struct PushFrontC<Head,Tuple<Trail...>>{///插入类型到Tuple首部
+    using type = Tuple<Head,Trail...>;
+};
+
+
+template<typename Trail,typename ...Head>struct PushBackC;
+
+template<typename Trail,typename ...Head>
+struct PushBackC<Trail,Tuple<Head...>>{///插入类型到Tuple尾部
+    using type = Tuple<Head...,Trail>;
+};
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double> a;
+   
+    FrontC<decltype(a)>::type x1;/// char x1;
+    PopFrontC<decltype(a)>::type x2;/// Tuple<short,double> x2;
+    PushFrontC<bool, decltype(a)>::type x3;/// Tuple<bool,char,short,double> x3;
+    PushBackC<int, decltype(a)>::type x4;/// Tuple<char,short,double,int> x4;
+    
+    return 0;
+}
+```
+
+发现类模板也无法萃取出Tuple的最后一个类型，或者移除最后一个类型。因为Tuple<Head...,Trail>这样的类型，无法被偏特化。
+
+### 萃取Tuple的指定位置的类型
+
+通过Supscript可以萃取指定位置的类型，代码如下：
+
+```
+template <int idx, typename ...T>
+struct Supscript;
+
+template <int idx,typename H, typename ...T>
+struct Supscript<idx,Tuple<H,T...>>{
+private:
+    using last = typename Supscript<idx-1,Tuple<T...>>::type;
+public:
+    using type = std::conditional_t<idx==0, H,last>;
+};
+
+template <typename H,typename ...T>
+struct Supscript<0,Tuple<H,T...>>{
+    using type = H;
+};
+
+///为何不能这样写？
+///template <typename ...T>
+///using last_t = typename Supscript<sizeof...(T)-1, T...>::type;
+
+template<typename ...T>struct LastType;
+
+template<typename ...T>
+struct LastType<Tuple<T...>>{
+    using type = typename Supscript<sizeof...(T)-1, Tuple<T...>>::type;
+};
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a;
+    Tuple<short,double> av;
+    Tuple<char> ab;
+    
+    Supscript<0, decltype(a)>::type xx4;
+    Supscript<1, decltype(a)>::type xx43;
+    Supscript<2, decltype(a)>::type x4x4;
+    Supscript<3, decltype(a)>::type xx554;
+    Supscript<0, decltype(av)>::type xx444;
+    Supscript<1, decltype(av)>::type xx334;
+    
+    LastType<decltype(a)>::type xaa2a;///bool xaa2a;
+    LastType<decltype(av)>::type xaa3a;///double xaa3a;
+    LastType<decltype(ab)>::type xa4aa;///char xa4aa;
+    
+    return 0;
+}
+```
+
+上述代码，也可以用另外一种写法实现【好像换汤不换药，逻辑是一样的】，修改后如下：
+
+```
+template <int idx, typename ...T>
+struct Supscript;
+
+template <int idx,typename H, typename ...T>
+struct Supscript<idx,Tuple<H,T...>>{
+    using type = typename  Supscript<idx-1,Tuple<T...>>::type;
+};
+
+template <typename H, typename ...T>
+struct Supscript<0,Tuple<H,T...>>{
+    using type = H;
+};
+
+template <int idx, typename ...T>
+using supscript_t = typename Supscript<idx,T...>::type;
+
+///test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a;
+    Tuple<short,double> av;
+    Tuple<char> ab;
+    
+    supscript_t<0, decltype(a)> xxx0;/// char xxx0;
+    supscript_t<1, decltype(a)> xxx1;/// short xxx1;
+    supscript_t<2, decltype(a)> xxx2;/// double xxx2;
+    supscript_t<3, decltype(a)> xxx3;///bool xxx3;
+    supscript_t<0, decltype(av)> xxx4;///short xxx4
+    supscript_t<1, decltype(av)> xxx5;///double xxx5;
+    supscript_t<0, decltype(ab)> xxx6;/// char xxx6;
+    supscript_t<1, decltype(ab)> xxx7;/// Error
+    
+     return 0;
+}
+```
+
+经过上述代码改进后，Supscript依然可以萃取到任意指定位置的类型。
+
+## 6、移除Tuple的指定位置的类型
+
+借助上面PushFrontC这个方法可以轻松删掉Tuple指定位置的类型
+
+```
+template<int idx,typename ...T2>struct RemoveAt;
+
+template<int idx,typename H,typename ...T2>
+struct RemoveAt<idx,Tuple<H,T2...>>{
+    using type = typename PushFrontC<H,typename RemoveAt<idx-1,Tuple<T2...>>::type>::type;
+};
+
+template<typename H,typename ...T2>
+struct RemoveAt<0,Tuple<H,T2...>>{
+    using type = Tuple<T2...>;
+};
+
+template<int idx,typename T1,typename ...T2>
+using remove_at_t = typename RemoveAt<idx,T1,T2...>::type;
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a ('a',34,6.8,true);
+    
+    remove_at_t<0, decltype(a)> xxx1; ///Tuple<short,double,bool> xxx1;
+    remove_at_t<1, decltype(a)> xxx12;///Tuple<char,double,bool> xxx12;
+    remove_at_t<2, decltype(a)> xxx21;///Tuple<char,short,bool> xxx21;
+    remove_at_t<3, decltype(a)> xx3x21;///Tuple<char,short,double> xx3x21;
+    
+     return 0;
+}
+```
+
+## 7、插入特定类型到Tuple的指定位置
+
+依葫芦画瓢，按照上面移除类型的指导思想，很容易写出插入某个类型到Tuple中指定位置的方法，参考代码如下：
+
+```
+
+template<typename X,int idx,typename ...T>struct InsertAt;
+
+template<typename X,int idx,typename H,typename ...T2>
+struct InsertAt<X,idx,Tuple<H,T2...>>{
+    using type = typename PushFrontC<H,typename InsertAt<X,idx-1,Tuple<T2...>>::type>::type;
+};
+
+template<typename X,typename H,typename ...T>
+struct InsertAt<X,0,Tuple<H,T...>>{
+    using type = Tuple<X,H,T...>;
+};
+
+template<typename X>
+struct InsertAt<X,0,Tuple<>>{
+    using type = Tuple<X>;
+};
+
+template<typename X,int idx,typename ...T>
+using insert_at_t = typename InsertAt<X,idx,T...>::type;
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a ('a',34,6.8,true);
+    
+    insert_at_t<bool,0, decltype(a)> xxx1;   ///Tuple<bool,char,short,double,bool> xxx1;
+    insert_at_t<void*,1, decltype(a)> xxx12; ///Tuple<char,void*,short,double,bool> xxx12;
+    insert_at_t<char*, 2,decltype(a)> xxx21; ///Tuple<char,short,char*,double,bool> xxx21;
+    insert_at_t<int*,3,decltype(a)> xx3x21; ///Tuple<char,short,double,int*,bool> xx3x21;
+    insert_at_t<long,4,decltype(a)> xx34x21;///Tuple<char,short,double,bool,long> xx34x21;
+        
+     return 0;
+}
+```
+
+
+
+## 8、翻转Tuple的类型列表
+
+借助上面PushBackC这个方法可以轻松实现Tuple类型反转。
+
+```
+template <int idx, typename ...T>struct Reverse;
+
+template <int idx,typename H, typename ...T>
+struct Reverse<idx,Tuple<H,T...>>{
+    using type =  typename PushBackC<H,typename Reverse<idx-1,Tuple<T...>>::type>::type;
+};
+
+template <typename H, typename ...T>
+struct Reverse<0,Tuple<H,T...>>{
+    using type = Tuple<H>;
+};
+
+template <int idx, typename ...T>
+using reverse_t = typename Reverse<idx, T...>::type;
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a;
+    Tuple<short,double> av;
+    Tuple<char> ab;
+    
+    reverse_t<0, decltype(a)> xfdas0;/// Tuple<char> xfdas0;
+    reverse_t<1, decltype(a)> xfdas1;/// Tuple<short,char> xfdas1;
+    reverse_t<2, decltype(a)> xfdas2;/// Tuple<double,short,char> xfdas2;
+    reverse_t<3, decltype(a)> xfdas3;/// Tuple<bool,double,short,char> xfdas3;
+    reverse_t<0, decltype(av)> xfdas4;/// Tuple<short> xfdas4;
+    reverse_t<1, decltype(av)> xfdas5;/// Tuple<double,short> xfdas5;
+    
+     return 0;
+}
+```
+
+## 9、两个Tuple合并
+
+可以想办法把两个Tuple内部的类型合并成到一个Tuple中：
+
+```
+template<typename T,typename ...T1> struct Merge;
+
+template<typename T,typename T1,typename ...T2>
+struct Merge<T,Tuple<T1,T2...>>{
+private:
+    using Head = decltype(PushBackT(T(),T1()));
+    using Trail = Tuple<T2...>;
+public:
+    using type = typename Merge<Head,Trail>::type;
+};
+
+template<typename T,typename T1>
+struct Merge<T,Tuple<T1>>{
+public:
+    using type = decltype(PushBackT(T(),T1()));
+};
+
+template<typename T,typename ...T1>
+using merge_t = typename Merge<T, T1...>::type;
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a;
+    Tuple<short,double> av;
+    Tuple<char> ab;
+    
+    merge_t<decltype(ab), decltype(av)> x11;///Tuple<char,short,double> x11;
+    merge_t<decltype(av), decltype(av)> x12;/// Tuple<short,double,short,double> x12;
+    merge_t<decltype(av), decltype(ab)> x13;/// Tuple<short,double,char> x13;
+    
+     return 0;
+}
+```
+
+## 10、判断两个Tuple的类型列表中是否有相同的类型
+
+利用上面的Search方法可以判断Tuple中是否包含特定类型，因而我们可以再进一步判断两个Tuple是否有相同的类型，有则返回true，否则返回false，代码参考如下：
+
+```
+template<typename T1,typename ...T2>struct ContainSame;
+
+template<typename T1,typename Tn1,typename ...Tn2>
+struct ContainSame<T1,Tuple<Tn1,Tn2...>> : std::conditional_t<Search<Tn1,T1>::value, std::true_type, ContainSame<T1, Tuple<Tn2...>>>{
+};
+
+template<typename T1,typename Tn1>
+struct ContainSame<T1,Tuple<Tn1>> :Search<Tn1,T1>{///从Tuple:T1中搜索是否包含类型Tn1
+};
+
+template<typename T1,typename ...T2>
+bool contain_same_v = ContainSame<T1,T2...>::value;
+
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a ('a',34,6.8,true);
+    Tuple<short,double> av(90,88.9);
+    Tuple<char> ab;
+    
+    bool xx0 = contain_same_v<decltype(a), decltype(av)>;///true
+    bool xx1 = contain_same_v<decltype(a), decltype(ab)>;///true
+    bool xx2 = contain_same_v<decltype(ab), decltype(av)>;///false
+    bool xx3 = contain_same_v<decltype(a), decltype(a)>;///true
+        
+     return 0;
+}
+```
+
+## 11、Tuple的类型列表排序（按字节大小）
+
+我们可以试着对Tuple中的类型列表按照一定规则进行排序，例如按照内存大小升序，参考代码如下：
+
+Note：下面代码采用插入排序的基本思想
+
+```
+template<typename A,typename B>
+struct Compare:std::integral_constant<bool, (sizeof(A) > sizeof(B))>{///比较类型A、B的大小
+};
+
+template<typename X,typename ...T>struct InsertFirst;
+
+template<typename X,typename H,typename ...T>
+struct InsertFirst<X,Tuple<H,T...>>{
+    using type = std::conditional_t<Compare<X,H>::value,typename PushFrontC<H,typename InsertFirst<X,Tuple<T...>>::type>::type,Tuple<X,H,T...>>;
+};
+
+template<typename X,typename T>
+struct InsertFirst<X,Tuple<T>>{
+    using type = std::conditional_t<Compare<X, T>::value,Tuple<T,X>,Tuple<X,T>>;
+};
+
+template<typename X>
+struct InsertFirst<X,Tuple<>>{
+    using type =  Tuple<X>;
+};
+
+template<typename ...T>struct SortInsert;///插入排序
+
+template<typename H,typename ...T>
+struct SortInsert<Tuple<H,T...>>{
+    using type = typename InsertFirst<H,typename SortInsert<Tuple<T...>>::type>::type;///将H插入到Tuple<T...>中第一个大于H的类型前面
+};
+
+template<typename H>
+struct SortInsert<Tuple<H>>{
+    using type = Tuple<H>;
+};
+
+template<>
+struct SortInsert<Tuple<>>{
+    using type = Tuple<>;
+};
+
+///按照字节大小升序排列，如果需要修改成降序，只需把Compare改成“<”即可
+int main(int argc, const char * argv[]) {
+    Tuple<long double,long long,float,char,short,int,bool,double,bool> a;// ('a',34,6.8,true);
+    Tuple<long double,bool,double,int> av;//(90,88.9);
+    Tuple<double,bool> ab;
+    
+    SortInsert<decltype(a)>::type x59a; //Tuple<char,bool,bool,short,float,int,long long,double,long double>
+    SortInsert<decltype(av)>::type x49a; ///Tuple<bool,int,double,long double>
+    SortInsert<decltype(ab)>::type xx9a;///Tuple<bool,double>
+            
+     return 0;
+}
+```
+
+
+
+# Tuple对象的变换
+
+如果说刚才都是Tuple类型的变换，那我们接下来要讨论一下Tuple对象该如何变换？也就是形如一个Tuple<char>对象，如何变换到其他类型的对象Tuple<char,bool>？增加一个类型？删除一个类型？或者翻转类型？
+
+#### 首先先考虑一个基本问题:如何获取、修改Tuple对象指定位置的元素值？
+
+```
+template<int idx,typename ...T>
+auto& getTuple(Tuple<T...>& tuple){///确保参数只接受左值，函数返回左值，所以可以同时支持读、写
+    if constexpr (0 == idx) {///利用了constexpr编译时特性，Since C++17，否则就只能使用模板递归实现了
+        return  tuple.head;
+    }else{
+        return getTuple<idx-1>(tuple.tail);
+    }
+}
+
+///Test
+int main(int argc, const char * argv[]) {
+    Tuple<char,short,double,bool> a ('a',34,6.8,true);
+    Tuple<short,double> av(90,88.9);
+    Tuple<char> ab;
+    
+    auto xxx0 =  getTuple<0>(a);///copy -> 'a'
+    auto &xxx = getTuple<0>(a);///lvalue reference
+    xxx = '9';///modify
+    getTuple<3>(a) = false;///modify
+    auto xxx1 =  getTuple<1>(a);///34
+    auto xxx2 =  getTuple<2>(a);///6.8
+    auto xxx3 =  getTuple<3>(a);///true
+    auto xxx4 =  getTuple<0>(av);///90
+    
+     return 0;
+}
+```
+
+上述getTuple利用了constexpr编译时特性，C++17之前只能使用模板递归实现，参考如下代码，由于函数模板不支持偏特化，所以需要函数外面套上一层类TP，借助TP类的模板偏特化来实现递归结束：
+
+```
+template<int idx,typename ...T>struct TP;
+
+template<int idx,typename H,typename ...T>
+struct TP<idx,Tuple<H,T...>>{
+    static auto& fun(Tuple<H,T...>& tp){
+        return TP<idx-1,Tuple<T...>>::fun(tp.tail);
+    }
+};
+
+template<typename H,typename ...T>
+struct TP<0,Tuple<H,T...>>{
+    static auto& fun(Tuple<H,T...>& tp){
+        return tp.head;
+    }
+};
+
+template<int idx,typename ...T>
+auto& getTuple(Tuple<T...>& tuple){
+    return TP<idx,Tuple<T...>>::fun(tuple);
+}
+```
+
+#### getTuple问题：
+
+上述的实现中getTuple只接受左值，返回值类型为引用（如果参数为右值，函数返回引用则引用了即将析构的对象，导致BUG），这可以方便直接进行修改；那如何让getTuple既能接受左值也能接受右值，实现如果参数为左值则函数返回引用，否则返回非引用呢？可以利用通用引用、完美转发来实现，代码参考如下：
+
+```
+template<int idx, typename T>
+auto&& getTuple(T&& tuple) {///参数为左值则返回引用，右值则返回非引用
+    if constexpr (0 == idx) {///利用了constexpr编译时特性，Since C++17，否则就只能使用模板递归实现了
+        return  std::forward<T>(tuple).head;
+    }
+    else {
+        return getTuple<idx - 1>(std::forward<T>(tuple).tail);
+    }
+}
+```
+
+
+
+## 1、类型搜索
+
+##### 1、从头开始找第一个
+
+从Tuple对象中搜索某个类型，返回该对象中第一个类型为指定类型的元素引用。没有则返回not_found.
+
+```
+struct not_found{}not_found_v;
+
+template<typename Pattern,typename H,typename ...T>
+auto& searchFirst(Tuple<H,T...> &tp){
+    cout<<":" <<sizeof...(T) << endl;
+    if constexpr (std::is_same_v<Pattern, H>) {
+        return tp.head;
+    }else if constexpr (sizeof...(T) > 0){
+        return searchFirst<Pattern,T...>(tp.tail);
+    }else{
+        return not_found_v;
+    }
+}
+
+template<typename Pattern>
+auto& searchFirst(Tuple<> &tp){
+    return not_found_v;
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<float,char,short,int,double,bool> a(8.5,'a',34,90,6.8,true);
+
+    auto& notFound = searchFirst<int*>(a);///sh::not_found
+    auto char11 = searchFirst<char>(a);///'a'
+    auto& short1 = searchFirst<short>(a);///34
+    auto& bool1 = searchFirst<bool>(a);///true
+    auto float1 = searchFirst<float>(a);///8.5
+    auto int1 = searchFirst<int>(a);///90
+    auto& double1 = searchFirst<double>(a);///6.8
+
+    bool1 = false;
+    short1 = 67;///modify
+    double1 = 9.5;///modiy
+        
+     return 0;
+}
+```
+
+##### 2、从尾开始找第一个
+
+上面代码是从头开始遍历，找第一个，那如果反过来，找最后一个类型相同的元素呢？也就是从尾部开始遍历找第一个。如果利用上面的代码，我们可以先把Tuple的类型翻转一下【reverse_t】，然后在里面搜索第一个类型匹配的元素所在位置【SearchH】，这样我们用Tuple类型的总长度减去匹配的位置就是在原类型中最后一个匹配的位置，最后再利用萃取Tuple指定位置的方法【getTuple】即可。
+
+```
+template<typename Pattern,typename ...T>
+auto& searchLast(Tuple<T...> &tp){
+    using reverseType = reverse_t<sizeof...(T)-1, Tuple<T...>>;///类型翻转
+    constexpr int idx =  SearchH<Pattern, reverseType>::value;///搜索类型Pattern所在位置
+    if constexpr (0 == idx) {
+        return not_found_v;
+    }else{
+        return getTuple<sizeof...(T)-idx>(tp);
+    }
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<bool,float,char,short,int,float,bool> a(true,8.5,'a',34,90,6.8,false);
+
+    auto&f1 = searchLast<float>(a);///6.8
+    auto &b0 = searchLast<bool>(a);///false
+    auto &int0 = searchLast<int>(a);///90
+        
+     return 0;
+}
+```
+
+由此可见，上述方法【searchLast】的实现，同时利用了多个已经实现的类型萃取技术。有没有办法独立实现呢？也就是不利用其他已经实现的萃取方法【例如通过递归实现】。我想肯定也是可以的，参考代码如下：
+
+```
+template<typename Pattern,typename H,typename ...T>
+auto& searchLast(Tuple<H,T...> &tp){
+    constexpr int size = sizeof...(T);
+    
+    if constexpr (0 == size) {
+        if constexpr (std::is_same_v<Pattern, H>) {
+            return tp.head;
+        }else{
+            return not_found_v;;
+        }
+    }else{
+        auto &last = searchLast<Pattern,T...>(tp.tail);
+        
+        if constexpr (std::is_same_v<Pattern, H>) {
+            if constexpr (std::is_same_v<not_found, std::remove_reference_t<decltype(last)>>) {
+                return tp.head;
+            }else{
+                return last;
+            }
+        }else {
+            return last;
+        }
+    }
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<bool,float,char,short,int,float,bool> a(true,8.5,'a',34,90,6.8,false);
+
+    auto&f1 = searchLast<float>(a);///6.8
+    auto &b0 = searchLast<bool>(a);///false
+    auto &int0 = searchLast<int>(a);///90
+            
+     return 0;
+}
+
+```
+
+## 2、Tuple首尾中增加、移除类型
+
+如下代码展示了如何在Tuple的首尾、增加类型、删除类型，并且提供了测试案例：
+
+```
+template<typename Head,typename ...Trail>
+inline auto pushFront(const Head& h,const Tuple<Trail...> &trail){///把对象h放到Tuple的首部，生成一个新的Tuple
+    using T =  decltype(PushForntT(h, trail));
+    if constexpr (sizeof...(Trail) > 0) {
+        return T(h,trail);
+    }else{
+        return Tuple<Head>(h);
+    }
+}
+
+
+template<typename ...T>
+inline auto popFront(const Tuple<T...> &tup){///移除Tuple的第一个元素，并返回新的Tuple
+    constexpr int size = sizeof...(T);
+    if constexpr (size == 0 || size == 1) {
+        return Tuple<>();
+    }else{
+        return tup.tail;
+    }
+}
+
+template<typename ...T>
+inline auto popBack(const Tuple<T...>&tup){///移除Tuple的最后一个元素，并返回新的Tuple
+    constexpr int size = sizeof...(T);
+    if constexpr (size == 0 || size == 1) {
+        return Tuple<>();
+    }else{
+        return pushFront(tup.head,popBack(tup.tail));
+    }
+}
+
+
+template<typename Head,typename ...Trail>
+inline auto pushBack(const Head& h,const Tuple<Trail...> &trail){///把对象h放到Tuple的尾部，生成一个新的Tuple
+    if constexpr (sizeof...(Trail) == 0) {
+        return Tuple<Head>(h);
+    }else  if constexpr (sizeof...(Trail) == 1) {
+        return Tuple<decltype(trail.head),Head>(trail.head,h);
+    }else{
+        return pushFront(trail.head,pushBack(h,trail.tail));
+    }
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<bool,float,char,short,int,float,bool> a(true,8.5,'a',34,90,6.8,false);
+    Tuple<long double,bool,double,int> av(88.9,false,5.6,9);
+    Tuple<double,bool> ab(4.5,true);
+
+    auto&&cd10 = popFront(a);///(8.5,'a',34,90,6.8,false);
+    auto&&cd00 = popFront(av);///(false,5.6,9);
+    auto&&cd40 = popFront(ab);///(true);
+    auto&&cd30 = popFront(cd40);///()
+    auto&&cd80 = popFront(cd30);///()
+   
+    auto&& a00 = popBack(a); ///(true,8.5,'a',34,90,6.8);
+    auto&&ab00 = popBack(ab); ///(4.5);
+    auto&&ab01 = popBack(ab00);///()
+    auto&&ab02 = popBack(ab01);///()
+    
+    auto&&a000 = pushFront('b', a);///('b',true,8.5,'a',34,90,6.8,false);
+    auto&&av000 = pushFront(false, av);///(false,88.9,false,5.6,9);
+    auto&&ab000 = pushFront(90, ab00);///(90,4.5)
+    auto&&a5000 = pushFront(80, ab02);///(80)
+    
+    auto&&ab88 = pushBack(10, ab01);///(10)
+    auto&&ab22 = pushBack(false, ab88);///(10,false)
+    auto&&ab62 = pushBack('x', ab22);///(10,false,'x')
+    auto&&a7ba = pushBack(true, av);///(88.9,false,5.6,9,true);
+              
+     return 0;
+}
+```
+
+## 3、移除Tuple的指定位置的元素
+
+借助上面pushFront这个方法可以轻松删掉Tuple指定位置的元素，写了这么多，突然发现一切都很顺其自然，一气呵成！
+
+```
+template<unsigned int idx,typename ...T>
+auto removeAt(Tuple<T...>&tup){
+    constexpr int size = sizeof...(T);
+    static_assert(idx < size, "idx should less than the total number of type inside Tuple");
+    if constexpr (size == 1) {
+        return Tuple<>();
+    }else  if constexpr (idx == 0) {
+        return tup.tail;
+    }else{
+        auto && last = removeAt<idx-1>(tup.tail);
+        return pushFront(tup.head, last);
+    }
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<bool,float,char,short,int,float,bool> a(true,8.5,'a',34,90,6.8,false);
+
+    auto&&aa01 = removeAt<0>(a);/// (     8.5,'a',34,90,6.8,false);
+    auto&&aa02 = removeAt<1>(a);/// (true,    'a',34,90,6.8,false);
+    auto&&aa03 = removeAt<2>(a);/// (true,8.5,   ,34,90,6.8,false);
+    auto&&aa04 = removeAt<3>(a);/// (true,8.5,'a',   90,6.8,false);
+    auto&&aa05 = removeAt<4>(a);/// (true,8.5,'a',34,   6.8,false);
+    auto&&aa06 = removeAt<5>(a);/// (true,8.5,'a',34,90    ,false);
+    auto&&aa07 = removeAt<6>(a);/// (true,8.5,'a',34,90,6.8      );
+  //  auto&&aa08 = removeAt<7>(a);///Error
+                  
+     return 0;
+}
+```
+
+## 4、把元素插入到Tuple的指定位置
+
+所谓“一招鲜吃遍天”，思维模式都是一样一样的，写起来几乎没有啥障碍，代码参考如下：
+
+```
+template<unsigned int idx,typename X, typename ...T>
+auto insertToTuple(const X& a, const Tuple<T...>&tup){
+    constexpr int size = sizeof...(T);
+    static_assert(idx <= size, "idx should less or equal than the total number of type inside Tuple");
+    if constexpr (size == 0) {
+        return Tuple<X>(a);
+    }else if constexpr(idx == 0){
+        return Tuple<X,T...>(a,tup);
+    }else if constexpr(size == 1){///size == 1 && idx == 1
+        return Tuple<decltype(tup.head),X>(tup.head,a);
+    }else{///size > 1
+        return pushFront(tup.head, insertToTuple<idx-1>(a, tup.tail));
+    }
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<long double,bool,double,int> av(88.9,false,5.6,9);
+   
+    auto r00 = insertToTuple<0>(999, av);   ///(999,88.9,false,5.6,9);
+    auto r01 = insertToTuple<1>('U', av);   ///(88.9,'U',false,5.6,9);
+    auto r02 = insertToTuple<2>(7, av);     ///(88.9,false,7,5.6,9);
+    auto r03 = insertToTuple<3>(true, av);  ///(88.9,false,5.6,true,9);
+    auto r04 = insertToTuple<4>(57, av);    ///(88.9,false,5.6,9,57);
+   // auto r05 = insertToTuple<5>(78.66, av); Error
+                     
+     return 0;
+}
+```
+
+
+
+## 5、Tuple类型翻转
+
+借助上面pushBack这个方法可以轻松实现Tuple的类型反转，参考代码如下：
+
+```
+template<typename ...T>
+auto reverseTuple(const Tuple<T...>&tup){
+    constexpr int size = sizeof...(T);
+    if constexpr (size <= 1) {
+        return tup;
+    }else {
+        auto && last = reverseTuple(tup.tail);
+        return pushBack(tup.head, last);
+    }
+}
+
+
+int main(int argc, const char * argv[]) {
+    Tuple<bool,float,char,short,int,float,bool> a(true,8.5,'a',34,90,6.8,false);
+    Tuple<long double,bool,double,int> av(88.9,false,5.6,9);
+    Tuple<double,bool> ab(4.5,true);
+    Tuple<double> a4b(4.5);
+    Tuple<> a94b;
+    
+    auto&& r00 = reverseTuple(a); ///(false,6.8,90,34,'a',8.5,true);
+    auto&& r01 = reverseTuple(av);///(9, 5.6, false , 88.9);
+    auto&& r02 = reverseTuple(ab); ///(true , 4.5)
+    auto&& r03 = reverseTuple(a4b);/// (4.5);
+    auto&& r04 = reverseTuple(a94b);///Tuple<>
+    auto&& r05 = reverseTuple(r00);///(true,8.5,'a',34,90,6.8,false);
+                      
+     return 0;
+}
+```
+
+## 6、两个Tuple合并
+
+我们可以想办法让两个Tuple合并成一个Tuple，代码参考如下：
+
+mergeTuple采用了模板禁用原理，如果第一个类型X不是Tuple类型，禁用该模板！
+
+```
+template<typename ...T>
+struct isTuple:std::false_type{
+};
+
+template<typename ...T>
+struct isTuple<Tuple<T...>> : std::true_type{
+};
+
+template<typename X, typename ...T,typename = std::enable_if_t<isTuple<X>::value>>
+auto mergeTuple(const X& a, const Tuple<T...>&tup){
+    constexpr int size = sizeof...(T);
+    if constexpr(size == 0) {
+        return a;
+    }else  if constexpr(size == 1) {
+        return pushBack(tup.head, a);
+    }else{
+        auto && tm = pushBack(tup.head, a);
+        return mergeTuple(tm, tup.tail);
+    }
+}
+
+int main(int argc, const char * argv[]) {
+    Tuple<long double,bool,double,int> av(88.9,false,5.6,9);
+    Tuple<double,bool> ab(4.5,true);
+    Tuple<double> a4b(7.5);
+    Tuple<> a94b;
+   
+    auto&& tm000  = mergeTuple(av, ab);
+    auto&& tm001  = mergeTuple(av, a4b);
+    auto&& tm002  = mergeTuple(ab, ab);
+    auto&& tm003  = mergeTuple(ab, a94b);
+    auto&& tm004  = mergeTuple(a94b, ab);
+    auto&& tm005  = mergeTuple(a4b, ab);
+                          
+     return 0;
+}
+```
+
+## 优化
+
+【问题】：以上实现都基于模板递归调用实现，其实效率很低，根本原因是因为上述新的Tuple对象的构造是从最后一个元素开始的，然后从后往前递归调用如下构造方法：
+
+    Tuple(const Tuple<T0,Tn...> & a);
+    Tuple(const T0 &h,const Tuple<Tn...> &t);
+
+ 这导致同一个元素在整个递归过程中会被Copy很多次，最理想的情况应该是一个元素只copy一次，有办法实现吗？？其实就是想办法使得只需要调用如下构造方法即可：
+
+```
+   template<typename _T0,typename ... _Tn,typename =std::enable_if_t<sizeof...(Tn)==sizeof...(_Tn)>>
+    Tuple( _T0&& a, _Tn && ...  n):head(std::forward<_T0>(a)),tail(std::forward<_Tn>(n)...){
+    }
+```
+
+如果能调用如上构造方法，那所有的元素都只会被copy一次。我们可以写一个方法使得能调用上面的构造函数：
+
+```
+template<typename ...T>
+auto makeTuple(T&& ...element) {///使用完美转发，左值调拷贝构造函数，右值调移动构造函数
+  return  Tuple<T...>(std::forward<T>(element)...);
+}
+
+///下面Tuple的构造 所有元素都只被copy了一次
+int main()
+{
+    auto tt1 = Tuple<bool, int, char>(true,10,'a');///构造对象时，必须先知道类型
+    auto && tp00 =  makeTuple(true,'0',90,'w');///构造对象时，类型由编译器自动根据参数进行推断
+}
+```
+
+通过如下方法，可以做到直接使用makeTuple方法构造出所需的对象，只需要传递索引序列（索引信息携带在IndexListType类型中）。
+
+```
+template<unsigned ...idx>
+struct IndexListType{///类型中携带数字索引信息
+};
+
+///技巧1：通过这种方法将 IndexListType中的索引信息...idx 提取出来
+///技巧2：makeTuple参数直接使用变长索引...
+///技巧3：函数模板参数可以同时存在多个变参？2个“...”同时存在，类模板中应该不行
+template<typename ...T,unsigned ...idx>
+auto reformTuple(const Tuple<T...>&tup,IndexListType<idx...>) {
+    return makeTuple(getTuple<idx>(tup)...);
+}
+
+int main()
+{
+    auto && tp00 =  makeTuple(true,'0',90,'w');
+
+    auto&& aa44 = reformTuple(tp00, IndexListType<3,2,1>()); ///('w',90,'0')
+}
+```
+
+有了如上方法，我们可以优化之前所写的方法，避免递归调用，使得每个元素都只被copy一次。
+
+#### 1、优化Tuple类型翻转
+
+由于GenerateIndexType生成的携带索引信息的类型IndexListType<...>发生在编译阶段，由编译器替我们递归调用完成，不会产生实际运行代码，而真正产生代码调用的是reformTuple，该方法会直接构造出一个Tuple，所以该方法效率较高。可以与上面的翻转代码比较一下！
+
+```
+///将数字h,插入到IndexListType<idx...>的前面
+///这个为何不能用类型模板来操作？我尝试了，失败了，下次研究研究。
+template<unsigned h, unsigned...idx>
+IndexListType<h, idx...> pushFrontIndexType(IndexListType<idx...>);
+
+///生成IndexListType<from....>类型信息，from表示开始数字，length为正则向前增长，为负则向后递减
+template<int from, int length>
+struct  GenerateIndexType {
+    constexpr static int dt = length > 0 ? -1 : 1;
+    using lastType = typename GenerateIndexType<from - dt, length + dt>::type;
+
+    using type =  decltype(pushFrontIndexType<from>(lastType())) ;
+};
+
+template<int from>
+struct  GenerateIndexType<from,0> {
+    using type = IndexListType<from>;
+};
+
+
+template<typename ...T>
+auto reverseTuple(const Tuple<T...>& tup) {
+    constexpr int lenth = sizeof...(T) - 1;
+    return reformTuple(tup,GenerateIndexType<lenth, -lenth>::type());
+}
+
+
+int main()
+{
+    //GenerateIndexType<0, 10>::type aa;///IndexListType<0,1,2,3,4,5,6,7,8,9,10>
+    //GenerateIndexType<10, -2>::type a0a;///IndexListType<10,9,8>
+  
+    auto && tp00 =  makeTuple(true,'0',90,'w');
+    auto&& tp10 = makeTuple(20, 'a', 4.2, false, 'w');
+
+    auto xx  = reverseTuple(tp00);
+    auto x2x = reverseTuple(tp10);
+}
+```
+
+类似的，删除指定元素、插入指定元素，也就很简单了，只需要生成各自需要的IndexListType即可。
